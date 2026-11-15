@@ -144,6 +144,7 @@ const DEFAULT_SETTINGS: UserSettings = {
     '.docx': 'word-online',
     '.md': 'markdown',
     '.pdf': 'pdf',
+    '.epub': 'ebook',
     '.zip': 'archive',
     '.excalidraw': 'excalidraw',
     '.drawio': 'drawio',

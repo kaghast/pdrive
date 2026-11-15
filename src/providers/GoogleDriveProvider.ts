@@ -108,6 +108,8 @@ export class GoogleDriveProvider implements StorageProvider {
         );
       } else if (query.mimeFilter === 'pdfs') {
         clauses.push(`mimeType = 'application/pdf'`);
+      } else if (query.mimeFilter === 'ebooks') {
+        clauses.push(`(name contains '.epub' or mimeType = 'application/epub+zip' or mimeType = 'application/pdf')`);
       } else if (query.mimeFilter === 'archives') {
         clauses.push(`(mimeType = 'application/zip' or mimeType = 'application/x-zip-compressed' or name contains '.zip')`);
       } else if (query.mimeFilter === 'diagrams') {

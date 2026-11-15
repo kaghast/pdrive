@@ -21,6 +21,7 @@ const CONFIGURABLE_EXTENSIONS = [
   '.docx',
   '.md',
   '.pdf',
+  '.epub',
   '.zip',
   '.sqlite',
   '.db',

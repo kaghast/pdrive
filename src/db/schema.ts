@@ -1,6 +1,7 @@
 import { relations } from 'drizzle-orm';
 import {
   boolean,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -30,6 +31,7 @@ export const DEFAULT_OPEN_WITH: OpenWithPreferences = {
   '.md': 'markdown',
   '.markdown': 'markdown',
   '.pdf': 'pdf',
+  '.epub': 'ebook',
   '.zip': 'archive',
   '.excalidraw': 'excalidraw',
   '.drawio': 'drawio',
@@ -188,6 +190,54 @@ export const auditLogs = pgTable('audit_logs', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+export const ebookReadingStates = pgTable(
+  'ebook_reading_states',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+    fileId: text('file_id').notNull(),
+    fileName: text('file_name').notNull(),
+    format: text('format').default('epub').notNull(),
+    currentLocation: text('current_location').default('1').notNull(),
+    currentPage: integer('current_page').default(1).notNull(),
+    totalPages: integer('total_pages').default(1).notNull(),
+    scrollPercent: integer('scroll_percent').default(0).notNull(),
+    progressPercent: integer('progress_percent').default(0).notNull(),
+    bookTitle: text('book_title'),
+    bookAuthor: text('book_author'),
+    lastReadAt: timestamp('last_read_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('ebook_reading_states_user_file_idx').on(table.userId, table.fileId),
+  ]
+);
+
+export const ebookAnnotations = pgTable(
+  'ebook_annotations',
+  {
+    id: text('id').primaryKey(),
+    userId: integer('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+    fileId: text('file_id').notNull(),
+    fileName: text('file_name').notNull(),
+    format: text('format').default('epub').notNull(),
+    pageNumber: integer('page_number').default(1).notNull(),
+    chapterTitle: text('chapter_title'),
+    quoteText: text('quote_text').default('').notNull(),
+    noteText: text('note_text').default('').notNull(),
+    color: text('color').default('yellow').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('ebook_annotations_user_file_idx').on(table.userId, table.fileId),
+  ]
+);
+
 export const usersRelations = relations(users, ({ one, many }) => ({
   settings: one(userSettings, {
     fields: [users.id],
@@ -198,4 +248,6 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   editingSessions: many(editingSessions),
   backgroundJobs: many(backgroundJobs),
   auditLogs: many(auditLogs),
+  ebookReadingStates: many(ebookReadingStates),
+  ebookAnnotations: many(ebookAnnotations),
 }));

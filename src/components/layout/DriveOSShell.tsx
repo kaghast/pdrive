@@ -1,5 +1,6 @@
 import {
   Archive,
+  BookOpen,
   Clock,
   Database,
   FileCode2,
@@ -22,6 +23,7 @@ import { DashboardView } from '../dashboard/DashboardView';
 import { ArchiveManager } from '../editors/ArchiveManager';
 import { DiagramStudio } from '../editors/DiagramStudio';
 import { DocxViewer } from '../editors/DocxViewer';
+import { EbookReader } from '../editors/EbookReader';
 import { MarkdownEditor } from '../editors/MarkdownEditor';
 import { PdfStudio } from '../editors/PdfStudio';
 import { CodeFileEditor, ImageViewer } from '../editors/QuickPreviewEditors';
@@ -97,6 +99,14 @@ export const DriveOSShell: React.FC = () => {
             key={win.id}
             file={win.file}
             isGoogleExport={false}
+            targetFolderId={win.targetFolderId}
+          />
+        );
+      case 'ebook':
+        return (
+          <EbookReader
+            key={win.id}
+            file={win.file}
             targetFolderId={win.targetFolderId}
           />
         );
@@ -189,6 +199,13 @@ export const DriveOSShell: React.FC = () => {
             icon: FileText,
             action: () =>
               openNewAppWindow({ appId: 'pdf', title: 'Document.pdf', targetFolderId: currentFolderId }),
+          },
+          {
+            title: 'E-Book Reader',
+            desc: 'Read EPUB & PDF books from Google Drive with synced progress resume, highlights, notes, and Markdown export.',
+            icon: BookOpen,
+            action: () =>
+              openNewAppWindow({ appId: 'ebook', title: 'E-Book Reader', targetFolderId: currentFolderId }),
           },
           {
             title: 'Excalidraw Canvas',

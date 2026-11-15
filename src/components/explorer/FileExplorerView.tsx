@@ -1,6 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import {
   Archive,
+  BookOpen,
   CheckSquare,
   ChevronRight,
   Copy,
@@ -64,6 +65,9 @@ function FileTypeIcon({ file, className = 'h-5 w-5' }: { file: CloudFile; classN
   }
   if (['.md', '.json', '.js', '.ts', '.tsx', '.html', '.css', '.txt'].includes(ext)) {
     return <FileCode2 className={`${className} text-slate-600 dark:text-slate-300`} />;
+  }
+  if (ext === '.epub' || mime === 'application/epub+zip') {
+    return <BookOpen className={`${className} text-amber-600 dark:text-amber-400`} />;
   }
   if (ext === '.pdf' || mime === 'application/pdf') {
     return <FileText className={`${className} text-red-600 dark:text-red-400`} />;
@@ -827,6 +831,7 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
               <option value="folders">Folders</option>
               <option value="documents">Documents</option>
               <option value="pdfs">PDFs</option>
+              <option value="ebooks">E-Books (.epub, .pdf)</option>
               <option value="images">Images</option>
               <option value="archives">Archives (.zip)</option>
               <option value="diagrams">Diagrams</option>

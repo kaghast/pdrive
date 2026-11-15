@@ -8,6 +8,7 @@ import { ensureDatabaseSchema } from './src/db/bootstrap.ts';
 import { getSqlConnectionConfig, pool } from './src/db/index.ts';
 import { getPublicFirebaseConfig } from './src/lib/firebase-config.ts';
 import { archiveRouter } from './src/server/routes/archive.ts';
+import { ebookRouter } from './src/server/routes/ebook.ts';
 import { metadataRouter } from './src/server/routes/metadata.ts';
 import { microsoftRouter } from './src/server/routes/microsoft.ts';
 import { userRouter } from './src/server/routes/user.ts';
@@ -86,6 +87,7 @@ async function startServer() {
   app.use('/api/archive', archiveRouter);
   app.use('/api/microsoft', microsoftRouter);
   app.use('/api/word-sessions', wordSessionsRouter);
+  app.use('/api/ebook', ebookRouter);
 
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

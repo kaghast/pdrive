@@ -108,6 +108,44 @@ const SCHEMA_STATEMENTS: string[] = [
     "ip_address" text,
     "created_at" timestamp DEFAULT now() NOT NULL
   );`,
+
+  `CREATE TABLE IF NOT EXISTS "ebook_reading_states" (
+    "id" serial PRIMARY KEY NOT NULL,
+    "user_id" integer NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "file_id" text NOT NULL,
+    "file_name" text NOT NULL,
+    "format" text DEFAULT 'epub' NOT NULL,
+    "current_location" text DEFAULT '1' NOT NULL,
+    "current_page" integer DEFAULT 1 NOT NULL,
+    "total_pages" integer DEFAULT 1 NOT NULL,
+    "scroll_percent" integer DEFAULT 0 NOT NULL,
+    "progress_percent" integer DEFAULT 0 NOT NULL,
+    "book_title" text,
+    "book_author" text,
+    "last_read_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL
+  );`,
+
+  `CREATE UNIQUE INDEX IF NOT EXISTS "ebook_reading_states_user_file_idx"
+    ON "ebook_reading_states" ("user_id", "file_id");`,
+
+  `CREATE TABLE IF NOT EXISTS "ebook_annotations" (
+    "id" text PRIMARY KEY NOT NULL,
+    "user_id" integer NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "file_id" text NOT NULL,
+    "file_name" text NOT NULL,
+    "format" text DEFAULT 'epub' NOT NULL,
+    "page_number" integer DEFAULT 1 NOT NULL,
+    "chapter_title" text,
+    "quote_text" text DEFAULT '' NOT NULL,
+    "note_text" text DEFAULT '' NOT NULL,
+    "color" text DEFAULT 'yellow' NOT NULL,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL
+  );`,
+
+  `CREATE INDEX IF NOT EXISTS "ebook_annotations_user_file_idx"
+    ON "ebook_annotations" ("user_id", "file_id");`,
 ];
 
 /**

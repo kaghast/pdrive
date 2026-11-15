@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 import { db } from './index.ts';
 import {
   auditLogs,
@@ -7,6 +7,8 @@ import {
   DashboardCardConfig,
   DEFAULT_DASHBOARD_LAYOUT,
   DEFAULT_OPEN_WITH,
+  ebookAnnotations,
+  ebookReadingStates,
   editingSessions,
   fileMetadata,
   OpenWithPreferences,
@@ -376,3 +378,193 @@ export async function listAuditLogs(userId: number, limit = 50) {
     throw new Error('Failed to load audit logs.', { cause: error });
   }
 }
+
+export async function listEbookReadingStates(userId: number) {
+  try {
+    return await db
+      .select()
+      .from(ebookReadingStates)
+      .where(eq(ebookReadingStates.userId, userId))
+      .orderBy(desc(ebookReadingStates.lastReadAt));
+  } catch (error) {
+    console.error('listEbookReadingStates failed:', error);
+    throw new Error('Failed to load e-book reading states.', { cause: error });
+  }
+}
+
+export async function getEbookReadingState(userId: number, fileId: string) {
+  try {
+    const [state] = await db
+      .select()
+      .from(ebookReadingStates)
+      .where(and(eq(ebookReadingStates.userId, userId), eq(ebookReadingStates.fileId, fileId)));
+    return state ?? null;
+  } catch (error) {
+    console.error('getEbookReadingState failed:', error);
+    throw new Error('Failed to load e-book reading state.', { cause: error });
+  }
+}
+
+export async function upsertEbookReadingState(
+  userId: number,
+  input: {
+    fileId: string;
+    fileName: string;
+    format: string;
+    currentLocation: string;
+    currentPage: number;
+    totalPages: number;
+    scrollPercent: number;
+    progressPercent: number;
+    bookTitle?: string | null;
+    bookAuthor?: string | null;
+  }
+) {
+  try {
+    const now = new Date();
+    const [state] = await db
+      .insert(ebookReadingStates)
+      .values({
+        userId,
+        fileId: input.fileId,
+        fileName: input.fileName,
+        format: input.format,
+        currentLocation: input.currentLocation,
+        currentPage: input.currentPage,
+        totalPages: input.totalPages,
+        scrollPercent: input.scrollPercent,
+        progressPercent: input.progressPercent,
+        bookTitle: input.bookTitle ?? null,
+        bookAuthor: input.bookAuthor ?? null,
+        lastReadAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [ebookReadingStates.userId, ebookReadingStates.fileId],
+        set: {
+          fileName: input.fileName,
+          format: input.format,
+          currentLocation: input.currentLocation,
+          currentPage: input.currentPage,
+          totalPages: input.totalPages,
+          scrollPercent: input.scrollPercent,
+          progressPercent: input.progressPercent,
+          bookTitle: input.bookTitle ?? null,
+          bookAuthor: input.bookAuthor ?? null,
+          lastReadAt: now,
+          updatedAt: now,
+        },
+      })
+      .returning();
+    return state;
+  } catch (error) {
+    console.error('upsertEbookReadingState failed:', error);
+    throw new Error('Failed to save e-book reading progress.', { cause: error });
+  }
+}
+
+export async function listEbookAnnotations(userId: number, fileId: string) {
+  try {
+    return await db
+      .select()
+      .from(ebookAnnotations)
+      .where(and(eq(ebookAnnotations.userId, userId), eq(ebookAnnotations.fileId, fileId)))
+      .orderBy(asc(ebookAnnotations.pageNumber), asc(ebookAnnotations.createdAt));
+  } catch (error) {
+    console.error('listEbookAnnotations failed:', error);
+    throw new Error('Failed to load e-book annotations.', { cause: error });
+  }
+}
+
+export async function createEbookAnnotation(
+  userId: number,
+  input: {
+    id: string;
+    fileId: string;
+    fileName: string;
+    format: string;
+    pageNumber: number;
+    chapterTitle?: string | null;
+    quoteText: string;
+    noteText: string;
+    color: string;
+  }
+) {
+  try {
+    const now = new Date();
+    const [created] = await db
+      .insert(ebookAnnotations)
+      .values({
+        id: input.id,
+        userId,
+        fileId: input.fileId,
+        fileName: input.fileName,
+        format: input.format,
+        pageNumber: input.pageNumber,
+        chapterTitle: input.chapterTitle ?? null,
+        quoteText: input.quoteText,
+        noteText: input.noteText,
+        color: input.color,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    return created;
+  } catch (error) {
+    console.error('createEbookAnnotation failed:', error);
+    throw new Error('Failed to create annotation.', { cause: error });
+  }
+}
+
+export async function updateEbookAnnotation(
+  userId: number,
+  fileId: string,
+  annotationId: string,
+  patch: {
+    noteText?: string;
+    color?: string;
+    quoteText?: string;
+    chapterTitle?: string | null;
+  }
+) {
+  try {
+    const [updated] = await db
+      .update(ebookAnnotations)
+      .set({
+        ...patch,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(ebookAnnotations.id, annotationId),
+          eq(ebookAnnotations.userId, userId),
+          eq(ebookAnnotations.fileId, fileId)
+        )
+      )
+      .returning();
+    return updated ?? null;
+  } catch (error) {
+    console.error('updateEbookAnnotation failed:', error);
+    throw new Error('Failed to update annotation.', { cause: error });
+  }
+}
+
+export async function deleteEbookAnnotation(userId: number, fileId: string, annotationId: string) {
+  try {
+    const [deleted] = await db
+      .delete(ebookAnnotations)
+      .where(
+        and(
+          eq(ebookAnnotations.id, annotationId),
+          eq(ebookAnnotations.userId, userId),
+          eq(ebookAnnotations.fileId, fileId)
+        )
+      )
+      .returning();
+    return deleted ?? null;
+  } catch (error) {
+    console.error('deleteEbookAnnotation failed:', error);
+    throw new Error('Failed to delete annotation.', { cause: error });
+  }
+}
+

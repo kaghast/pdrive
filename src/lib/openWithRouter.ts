@@ -5,6 +5,7 @@ export type IntegratedAppId =
   | 'folder'
   | 'markdown'
   | 'pdf'
+  | 'ebook'
   | 'archive'
   | 'excalidraw'
   | 'drawio'
@@ -29,6 +30,7 @@ export const INTEGRATED_APPS: Record<IntegratedAppId, AppHandlerOption> = {
   folder: { id: 'folder', label: 'Folder Explorer', description: 'Browse folder contents' },
   markdown: { id: 'markdown', label: 'Markdown Studio', description: 'Split editor with GFM, KaTeX & Mermaid' },
   pdf: { id: 'pdf', label: 'PDF Studio', description: 'PDF.js viewer & PDF-lib page editor' },
+  ebook: { id: 'ebook', label: 'E-Book Reader', description: 'Read EPUB & PDF with highlights, resume & Markdown export' },
   archive: { id: 'archive', label: 'Archive Manager', description: 'Inspect, extract, and create ZIPs' },
   excalidraw: { id: 'excalidraw', label: 'Excalidraw', description: 'Freehand visual diagram editor' },
   drawio: { id: 'drawio', label: 'Draw.io', description: 'Technical architecture & UML diagrams' },
@@ -71,7 +73,10 @@ export function getCompatibleApps(file: CloudFile): AppHandlerOption[] {
     return [INTEGRATED_APPS.markdown, INTEGRATED_APPS.code];
   }
   if (ext === '.pdf' || mime === 'application/pdf') {
-    return [INTEGRATED_APPS.pdf, INTEGRATED_APPS.external];
+    return [INTEGRATED_APPS.pdf, INTEGRATED_APPS.ebook, INTEGRATED_APPS.external];
+  }
+  if (ext === '.epub' || mime === 'application/epub+zip') {
+    return [INTEGRATED_APPS.ebook];
   }
   if (ext === '.zip' || ext === '.rar' || mime.includes('zip')) {
     return [INTEGRATED_APPS.archive];

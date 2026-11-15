@@ -107,3 +107,125 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, 0.6);
 }
+
+/* PDF.js TextLayer overlay for selectable text in E-Book Reader */
+.textLayer {
+  color-scheme: only light;
+  position: absolute;
+  text-align: initial;
+  inset: 0;
+  overflow: clip;
+  opacity: 1;
+  line-height: 1;
+  letter-spacing: normal;
+  word-spacing: normal;
+  -webkit-text-size-adjust: none;
+  -moz-text-size-adjust: none;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+  z-index: 2;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor, 1) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+
+.textLayer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
+}
+
+.textLayer > :not(.markedContent),
+.textLayer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.textLayer .markedContent {
+  display: contents;
+}
+
+.textLayer span[role="img"] {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+.textLayer ::selection {
+  background: rgba(59, 130, 246, 0.3);
+  color: transparent;
+}
+
+/* E-Book Reader EPUB content defaults */
+.ebook-prose img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1rem auto;
+  border-radius: 0.5rem;
+}
+
+.ebook-prose h1,
+.ebook-prose h2,
+.ebook-prose h3,
+.ebook-prose h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.3;
+  margin-top: 1.5em;
+  margin-bottom: 0.6em;
+}
+
+.ebook-prose p {
+  margin-bottom: 0.95em;
+}
+
+.ebook-prose blockquote {
+  border-left: 3px solid rgba(100, 116, 139, 0.45);
+  padding-left: 1rem;
+  margin: 1rem 0;
+  opacity: 0.9;
+  font-style: italic;
+}
+
+.ebook-prose mark.ebook-hl-yellow {
+  background-color: rgba(250, 204, 21, 0.42);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.ebook-prose mark.ebook-hl-green {
+  background-color: rgba(74, 222, 128, 0.36);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.ebook-prose mark.ebook-hl-blue {
+  background-color: rgba(96, 165, 250, 0.36);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.ebook-prose mark.ebook-hl-pink {
+  background-color: rgba(244, 114, 182, 0.36);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 2px;
+  cursor: pointer;
+}
+
