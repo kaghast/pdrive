@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${SQL_DB_NAME:-personal_drive_os}
+      POSTGRES_USER: ${SQL_ADMIN_USER:-postgres}
+      POSTGRES_PASSWORD: ${SQL_ADMIN_PASSWORD:-changeme}
+    volumes:
+      - driveos_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SQL_ADMIN_USER:-postgres} -d ${SQL_DB_NAME:-personal_drive_os}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      APP_URL: ${APP_URL}
+      SQL_HOST: postgres
+      SQL_DB_NAME: ${SQL_DB_NAME:-personal_drive_os}
+      SQL_USER: ${SQL_ADMIN_USER:-postgres}
+      SQL_PASSWORD: ${SQL_ADMIN_PASSWORD:-changeme}
+      SQL_ADMIN_USER: ${SQL_ADMIN_USER:-postgres}
+      SQL_ADMIN_PASSWORD: ${SQL_ADMIN_PASSWORD:-changeme}
+      SESSION_SECRET: ${SESSION_SECRET}
+      MS_CLIENT_ID: ${MS_CLIENT_ID}
+      MS_CLIENT_SECRET: ${MS_CLIENT_SECRET}
+      MS_TENANT_ID: ${MS_TENANT_ID:-common}
+    volumes:
+      - driveos_tmp:/tmp/driveos
+
+volumes:
+  driveos_pgdata:
+  driveos_tmp:

@@ -1,0 +1,6 @@
+{
+  "name": "Personal Drive OS",
+  "description": "A personal cloud operating environment for Google Drive with integrated Markdown, PDF, Diagram, Archive, and Microsoft Word Online editing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
