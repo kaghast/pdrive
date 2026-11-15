@@ -284,6 +284,10 @@ export const DriveOSProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setFirebaseUser(null);
         setHasGoogleToken(false);
         setAuthLoading(false);
+      },
+      (configErr) => {
+        setAuthError(configErr);
+        setAuthLoading(false);
       }
     );
     return () => unsub();

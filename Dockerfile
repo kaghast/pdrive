@@ -22,7 +22,6 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/server.ts ./server.ts
 COPY --from=builder /app/src ./src
-COPY --from=builder /app/firebase-applet-config.json ./firebase-applet-config.json
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 RUN mkdir -p /tmp/driveos

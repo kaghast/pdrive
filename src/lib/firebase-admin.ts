@@ -1,11 +1,16 @@
 import { getApps, initializeApp } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
+import { Auth, getAuth } from 'firebase-admin/auth';
+import { getPublicFirebaseConfig } from './firebase-config.ts';
 
-if (!getApps().length) {
-  initializeApp({
-    projectId: firebaseConfig.projectId,
-  });
+export function getAdminAuth(): Auth {
+  if (!getApps().length) {
+    const { projectId } = getPublicFirebaseConfig();
+    if (!projectId) {
+      throw new Error(
+        'FIREBASE_PROJECT_ID environment variable is not set. Configure Firebase environment variables.'
+      );
+    }
+    initializeApp({ projectId });
+  }
+  return getAuth();
 }
-
-export const adminAuth = getAuth();

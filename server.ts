@@ -6,6 +6,7 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { ensureDatabaseSchema } from './src/db/bootstrap.ts';
 import { pool } from './src/db/index.ts';
+import { getPublicFirebaseConfig } from './src/lib/firebase-config.ts';
 import { archiveRouter } from './src/server/routes/archive.ts';
 import { metadataRouter } from './src/server/routes/metadata.ts';
 import { microsoftRouter } from './src/server/routes/microsoft.ts';
@@ -46,6 +47,17 @@ async function startServer() {
         error: err?.message || 'Database unavailable',
       });
     }
+  });
+
+  app.get('/api/config/firebase', (_req, res) => {
+    const cfg = getPublicFirebaseConfig();
+    if (!cfg.apiKey || !cfg.projectId) {
+      return res.status(500).json({
+        error:
+          'Firebase is not configured. Set FIREBASE_API_KEY, FIREBASE_AUTH_DOMAIN, FIREBASE_PROJECT_ID, and FIREBASE_APP_ID in your Environment Variables.',
+      });
+    }
+    res.json(cfg);
   });
 
   app.use('/api/user', userRouter);
