@@ -169,7 +169,7 @@ export class GoogleDriveProvider implements StorageProvider {
     const params = new URLSearchParams({
       q: `mimeType = '${FOLDER_MIME}' and trashed = false`,
       fields: 'files(id,name,mimeType,parents,modifiedTime)',
-      pageSize: '200',
+      pageSize: '1000',
       orderBy: 'name',
     });
     const res = await this.request(`${DRIVE_API}/files?${params.toString()}`);

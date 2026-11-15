@@ -43,6 +43,7 @@ import { getCompatibleApps } from '../../lib/openWithRouter';
 import { formatBytes, formatRelativeDate, getFileExtension } from '../../lib/utils';
 import { CloudFile } from '../../providers/StorageProvider';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { MoveItemsDialog } from './MoveItemsDialog';
 
 function FileTypeIcon({ file, className = 'h-5 w-5' }: { file: CloudFile; className?: string }) {
   if (file.isFolder) return <Folder className={`${className} text-blue-600 dark:text-blue-400`} />;
@@ -135,7 +136,7 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
   const [renameTarget, setRenameTarget] = useState<CloudFile | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [moveTargets, setMoveTargets] = useState<CloudFile[] | null>(null);
-  const [moveDestId, setMoveDestId] = useState('root');
+  const [moveInitialFolderId, setMoveInitialFolderId] = useState('root');
   const [bulkRenameOpen, setBulkRenameOpen] = useState(false);
   const [bulkPrefix, setBulkPrefix] = useState('');
   const [bulkSuffix, setBulkSuffix] = useState('');
@@ -1014,8 +1015,8 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
                   <button
                     type="button"
                     onClick={() => {
+                      setMoveInitialFolderId(mode === 'drive' ? currentFolderId : 'root');
                       setMoveTargets(selectedFiles);
-                      setMoveDestId('root');
                     }}
                     className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1 font-medium text-slate-700 shadow-xs dark:bg-slate-900 dark:text-slate-200"
                   >
@@ -1354,6 +1355,26 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
                 <Eye className="h-3.5 w-3.5 text-slate-400" />
               </button>
             ))}
+            {mode !== 'trash' && (
+              <button
+                type="button"
+                onClick={() => {
+                  const parentId = inspectorFile.parents?.[0];
+                  const resolved =
+                    parentId && folders.some((fl) => fl.id === parentId)
+                      ? parentId
+                      : mode === 'drive'
+                        ? currentFolderId
+                        : 'root';
+                  setMoveInitialFolderId(resolved);
+                  setMoveTargets([inspectorFile]);
+                }}
+                className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-left text-xs font-medium text-slate-700 hover:border-blue-400 hover:bg-blue-50/40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <span>Move to Folder...</span>
+                <FolderInput className="h-3.5 w-3.5 text-blue-600" />
+              </button>
+            )}
           </div>
 
           {/* Custom Tags */}
@@ -1534,12 +1555,19 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
             onClick={() => {
               const f = contextMenu.file;
               setContextMenu(null);
+              const parentId = f.parents?.[0];
+              const resolved =
+                parentId && folders.some((fl) => fl.id === parentId)
+                  ? parentId
+                  : mode === 'drive'
+                    ? currentFolderId
+                    : 'root';
+              setMoveInitialFolderId(resolved);
               setMoveTargets([f]);
-              setMoveDestId('root');
             }}
             className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
           >
-            <FolderInput className="h-3.5 w-3.5" />
+            <FolderInput className="h-3.5 w-3.5 text-blue-600" />
             <span>Move</span>
           </button>
 
@@ -1670,54 +1698,20 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
         </Dialog.Portal>
       </Dialog.Root>
 
-      {/* Move Dialog */}
-      <Dialog.Root open={Boolean(moveTargets)} onOpenChange={(o) => !o && setMoveTargets(null)}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-xs" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-[#14171F]">
-            <Dialog.Title className="font-display text-base font-semibold">
-              Move {moveTargets?.length} Item(s)
-            </Dialog.Title>
-            <select
-              value={moveDestId}
-              onChange={(e) => setMoveDestId(e.target.value)}
-              className="mt-4 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-            >
-              <option value="root">My Drive (Root)</option>
-              {folders.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
-              ))}
-            </select>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setMoveTargets(null)}
-                className="rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-medium dark:border-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!moveTargets) return;
-                  for (const f of moveTargets) {
-                    await storageProvider.moveFile(f.id, f.parents || [], moveDestId);
-                  }
-                  toast.success(`Moved ${moveTargets.length} item(s)`);
-                  setMoveTargets(null);
-                  setSelectedIds(new Set());
-                  triggerExplorerRefresh();
-                }}
-                className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-medium text-white"
-              >
-                Confirm Move
-              </button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      {/* Subfolder-Aware Move Dialog */}
+      <MoveItemsDialog
+        open={Boolean(moveTargets)}
+        items={moveTargets || []}
+        folders={folders}
+        initialFolderId={moveInitialFolderId}
+        metadataList={metadataList}
+        storageProvider={storageProvider}
+        onClose={() => setMoveTargets(null)}
+        onMoved={() => {
+          setSelectedIds(new Set());
+          triggerExplorerRefresh();
+        }}
+      />
 
       {/* Bulk Rename Dialog */}
       <Dialog.Root open={bulkRenameOpen} onOpenChange={setBulkRenameOpen}>
