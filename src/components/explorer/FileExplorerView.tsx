@@ -103,6 +103,7 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
   const [showFilters, setShowFilters] = useState(false);
 
   // Filters & sorting
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [mimeFilter, setMimeFilter] = useState('');
   const [extensionFilter, setExtensionFilter] = useState('');
@@ -189,6 +190,21 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
         return;
       }
 
+      if (mode === 'drive' && selectedTag) {
+        const tagged = metadataList.filter((m) => (m.tags || []).includes(selectedTag));
+        const loaded = await Promise.all(
+          tagged.map((r) => storageProvider.getFile(r.fileId).catch(() => null))
+        );
+        const q = search.trim().toLowerCase();
+        const filtered = loaded.filter(
+          (f): f is CloudFile =>
+            Boolean(f) && !f?.trashed && (!q || f!.name.toLowerCase().includes(q))
+        );
+        setFiles(filtered);
+        setLoading(false);
+        return;
+      }
+
       let modifiedAfter: string | undefined;
       if (dateFilter === '24h') {
         modifiedAfter = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
@@ -233,6 +249,7 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
     mode,
     orderBy,
     search,
+    selectedTag,
     sizeFilter,
     storageProvider,
   ]);
@@ -462,10 +479,22 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
     });
   };
 
-  const childFoldersOf = useCallback(
-    (parentId: string) => folders.filter((f) => (f.parents?.[0] || 'root') === parentId),
-    [folders]
+  const favoriteItems = useMemo(
+    () => metadataList.filter((m) => m.isFavorite),
+    [metadataList]
   );
+
+  const tagEntries = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of metadataList) {
+      for (const t of item.tags || []) {
+        const clean = t.trim();
+        if (!clean) continue;
+        counts.set(clean, (counts.get(clean) || 0) + 1);
+      }
+    }
+    return Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [metadataList]);
 
   return (
     <div
@@ -488,74 +517,110 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
       }}
       onClick={() => setContextMenu(null)}
     >
-      {/* Left Folder Tree */}
+      {/* Left Split Panel: Favorites (Top) & Tag Chips (Bottom) */}
       {mode === 'drive' && showTree && (
-        <aside className="hidden w-56 shrink-0 overflow-y-auto border-r border-slate-200 p-3 lg:block dark:border-slate-800">
-          <p className="px-2 pb-2 text-xs font-semibold text-slate-500">Folder Hierarchy</p>
-          <button
-            type="button"
-            onClick={() => setCurrentFolderId('root')}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOverFolderId('root');
-            }}
-            onDragLeave={() => setDragOverFolderId(null)}
-            onDrop={(e) => handleDropOnFolder(e, 'root')}
-            className={`flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-medium transition ${
-              currentFolderId === 'root'
-                ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300'
-                : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-            } ${dragOverFolderId === 'root' ? 'ring-2 ring-blue-500' : ''}`}
-          >
-            <Folder className="h-4 w-4 shrink-0 text-blue-600" />
-            <span className="truncate">My Drive</span>
-          </button>
+        <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200 lg:flex dark:border-slate-800">
+          {/* Top Half: Favorites */}
+          <div className="flex min-h-0 flex-1 flex-col p-3">
+            <div className="flex items-center justify-between px-1 pb-2">
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                Favorites
+              </span>
+              <span className="font-mono text-[11px] text-slate-400 tabular-nums">
+                {favoriteItems.length}
+              </span>
+            </div>
 
-          <div className="mt-1 space-y-0.5 pl-2">
-            {childFoldersOf('root').map((folder) => {
-              const sub = childFoldersOf(folder.id);
-              return (
-                <div key={folder.id}>
-                  <button
-                    type="button"
-                    onClick={() => setCurrentFolderId(folder.id)}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      setDragOverFolderId(folder.id);
-                    }}
-                    onDragLeave={() => setDragOverFolderId(null)}
-                    onDrop={(e) => handleDropOnFolder(e, folder.id)}
-                    className={`flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-left text-xs transition ${
-                      currentFolderId === folder.id
-                        ? 'bg-blue-50 font-medium text-blue-700 dark:bg-blue-950/50 dark:text-blue-300'
-                        : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
-                    } ${dragOverFolderId === folder.id ? 'ring-2 ring-blue-500' : ''}`}
-                  >
-                    <Folder className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                    <span className="truncate">{folder.name}</span>
-                  </button>
-                  {sub.length > 0 && (
-                    <div className="space-y-0.5 pl-3">
-                      {sub.slice(0, 8).map((child) => (
-                        <button
-                          key={child.id}
-                          type="button"
-                          onClick={() => setCurrentFolderId(child.id)}
-                          className={`flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-[11px] transition ${
-                            currentFolderId === child.id
-                              ? 'bg-blue-50 font-medium text-blue-700 dark:bg-blue-950/50 dark:text-blue-300'
-                              : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
-                          }`}
-                        >
-                          <Folder className="h-3 w-3 shrink-0" />
-                          <span className="truncate">{child.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+            <div className="flex-1 space-y-0.5 overflow-y-auto">
+              {favoriteItems.length === 0 ? (
+                <p className="px-1 py-3 text-[11px] leading-relaxed text-slate-400">
+                  Star files or folders to pin them here for quick access.
+                </p>
+              ) : (
+                favoriteItems.map((fav) => {
+                  const isFolder = fav.mimeType === 'application/vnd.google-apps.folder';
+                  const isActiveFolder = isFolder && !selectedTag && currentFolderId === fav.fileId;
+                  return (
+                    <button
+                      key={fav.fileId}
+                      type="button"
+                      onClick={() => {
+                        setSelectedTag(null);
+                        if (isFolder) {
+                          setCurrentFolderId(fav.fileId);
+                        } else {
+                          storageProvider
+                            .getFile(fav.fileId)
+                            .then((f) => openFileWithApp(f))
+                            .catch(() => toast.error('Unable to open favorite item'));
+                        }
+                      }}
+                      className={`flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-left text-xs transition ${
+                        isActiveFolder
+                          ? 'bg-blue-50 font-medium text-blue-700 dark:bg-blue-950/50 dark:text-blue-300'
+                          : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      {isFolder ? (
+                        <Folder className="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+                      ) : (
+                        <FileText className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                      )}
+                      <span className="truncate">{fav.fileName}</span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Bottom Half: Tag Chips */}
+          <div className="flex min-h-0 flex-1 flex-col border-t border-slate-200 p-3 dark:border-slate-800">
+            <div className="flex items-center justify-between px-1 pb-2">
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                <Tag className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                Tags
+              </span>
+              {selectedTag && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedTag(null)}
+                  className="text-[11px] font-medium text-blue-600 hover:underline dark:text-blue-400"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {tagEntries.length === 0 ? (
+                <p className="px-1 py-3 text-[11px] leading-relaxed text-slate-400">
+                  Add tags to files in the inspector to filter by tag chips here.
+                </p>
+              ) : (
+                <div className="flex flex-wrap content-start gap-1.5">
+                  {tagEntries.map(([tag, count]) => {
+                    const active = selectedTag === tag;
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => setSelectedTag((prev) => (prev === tag ? null : tag))}
+                        className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
+                          active
+                            ? 'border-blue-600 bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
+                            : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-300 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <span className="truncate">#{tag}</span>
+                        <span className="font-mono text-[10px] opacity-70 tabular-nums">{count}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              )}
+            </div>
           </div>
         </aside>
       )}
@@ -574,7 +639,29 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
           {/* Breadcrumbs */}
           <div className="flex min-w-0 items-center gap-1 text-sm">
-            {mode === 'drive' ? (
+            {mode === 'drive' && selectedTag ? (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setSelectedTag(null)}
+                  className="rounded-lg px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  My Drive
+                </button>
+                <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+                  #{selectedTag}
+                  <button
+                    type="button"
+                    aria-label="Clear tag filter"
+                    onClick={() => setSelectedTag(null)}
+                    className="rounded-full p-0.5 hover:bg-blue-200/60 dark:hover:bg-blue-900"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              </div>
+            ) : mode === 'drive' ? (
               breadcrumbs.map((crumb, idx) => (
                 <React.Fragment key={crumb.id}>
                   {idx > 0 && <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />}
@@ -789,6 +876,7 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
             <button
               type="button"
               onClick={() => {
+                setSelectedTag(null);
                 setMimeFilter('');
                 setExtensionFilter('');
                 setDateFilter('');
@@ -799,6 +887,54 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
             >
               Reset
             </button>
+          </div>
+        )}
+
+        {/* Mobile Favorites & Tag Chips Strip */}
+        {mode === 'drive' && (favoriteItems.length > 0 || tagEntries.length > 0) && (
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 px-4 py-2 lg:hidden dark:border-slate-800">
+            {favoriteItems.slice(0, 5).map((fav) => {
+              const isFolder = fav.mimeType === 'application/vnd.google-apps.folder';
+              return (
+                <button
+                  key={`m-fav-${fav.fileId}`}
+                  type="button"
+                  onClick={() => {
+                    setSelectedTag(null);
+                    if (isFolder) {
+                      setCurrentFolderId(fav.fileId);
+                    } else {
+                      storageProvider
+                        .getFile(fav.fileId)
+                        .then((f) => openFileWithApp(f))
+                        .catch(() => toast.error('Unable to open favorite item'));
+                    }
+                  }}
+                  className="inline-flex max-w-[150px] items-center gap-1 rounded-full border border-amber-200 bg-amber-50/70 px-2.5 py-1 text-[11px] font-medium text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300"
+                >
+                  <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" />
+                  <span className="truncate">{fav.fileName}</span>
+                </button>
+              );
+            })}
+            {tagEntries.map(([tag, count]) => {
+              const active = selectedTag === tag;
+              return (
+                <button
+                  key={`m-tag-${tag}`}
+                  type="button"
+                  onClick={() => setSelectedTag((prev) => (prev === tag ? null : tag))}
+                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                    active
+                      ? 'border-blue-600 bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
+                      : 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-300'
+                  }`}
+                >
+                  <span>#{tag}</span>
+                  <span className="font-mono text-[10px] opacity-70">{count}</span>
+                </button>
+              );
+            })}
           </div>
         )}
 

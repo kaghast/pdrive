@@ -11,7 +11,6 @@ import {
   Moon,
   RefreshCw,
   Settings,
-  Star,
   Sun,
   Trash2,
   Workflow,
@@ -36,7 +35,6 @@ import { WordSyncView } from '../word/WordSyncView';
 const NAV_ITEMS: { id: ActiveNavView; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
   { id: 'explorer', label: 'My Drive', icon: FolderOpen },
-  { id: 'favorites', label: 'Favorites', icon: Star },
   { id: 'recent', label: 'Recent', icon: Clock },
   { id: 'trash', label: 'Trash', icon: Trash2 },
   { id: 'word-sync', label: 'Word Sync', icon: RefreshCw },

@@ -33,6 +33,7 @@ export class GoogleDriveProvider implements StorageProvider {
   label = 'Google Drive';
   private getToken: () => string | null;
   private onUnauthorized: () => void;
+  private rootFolderId: string | null = null;
 
   constructor(getToken: () => string | null, onUnauthorized: () => void) {
     this.getToken = getToken;
@@ -153,6 +154,16 @@ export class GoogleDriveProvider implements StorageProvider {
   }
 
   async listAllFolders(): Promise<CloudFile[]> {
+    if (!this.rootFolderId) {
+      try {
+        const rootRes = await this.request(`${DRIVE_API}/files/root?fields=id`);
+        const rootData = await rootRes.json();
+        if (rootData?.id) this.rootFolderId = rootData.id;
+      } catch {
+        // ignore if root lookup fails
+      }
+    }
+
     const params = new URLSearchParams({
       q: `mimeType = '${FOLDER_MIME}' and trashed = false`,
       fields: 'files(id,name,mimeType,parents,modifiedTime)',
@@ -161,7 +172,16 @@ export class GoogleDriveProvider implements StorageProvider {
     });
     const res = await this.request(`${DRIVE_API}/files?${params.toString()}`);
     const data = await res.json();
-    return (data.files || []).map(toCloudFile);
+    const rawFiles = (data.files || []) as any[];
+
+    return rawFiles
+      .filter((raw) => Array.isArray(raw.parents) && raw.parents.length > 0)
+      .map((raw) => {
+        const normalizedParents = (raw.parents as string[]).map((p) =>
+          this.rootFolderId && p === this.rootFolderId ? 'root' : p
+        );
+        return toCloudFile({ ...raw, parents: normalizedParents });
+      });
   }
 
   async getFile(fileId: string): Promise<CloudFile> {
