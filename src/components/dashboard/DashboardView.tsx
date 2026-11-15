@@ -3,6 +3,7 @@ import {
   ArrowDown,
   ArrowUp,
   Clock,
+  Database,
   Eye,
   EyeOff,
   FileCode2,
@@ -191,6 +192,16 @@ export const DashboardView: React.FC = () => {
               <FilePlus2 className="h-4 w-4 text-red-600" />
               <span>Create PDF</span>
             </button>
+            <button
+              type="button"
+              onClick={() =>
+                openNewAppWindow({ appId: 'sqlite', title: 'database.sqlite', targetFolderId: currentFolderId })
+              }
+              className="flex min-h-[48px] items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5 text-left text-xs font-medium text-slate-800 transition hover:border-blue-400 hover:bg-blue-50/50 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-100"
+            >
+              <Database className="h-4 w-4 text-emerald-600" />
+              <span>New SQLite DB</span>
+            </button>
           </div>
         );
 
@@ -367,6 +378,7 @@ export const DashboardView: React.FC = () => {
             {[
               { label: 'Markdown Studio', appId: 'markdown' as const, icon: FileCode2 },
               { label: 'PDF Studio', appId: 'pdf' as const, icon: FileText },
+              { label: 'SQLite Studio', appId: 'sqlite' as const, icon: Database },
               { label: 'Excalidraw', appId: 'excalidraw' as const, icon: Workflow },
               { label: 'Mermaid Studio', appId: 'mermaid' as const, icon: Archive },
             ].map((item) => {

@@ -4,6 +4,7 @@ import {
   CheckSquare,
   ChevronRight,
   Copy,
+  Database,
   Download,
   Edit3,
   Eye,
@@ -54,6 +55,9 @@ function FileTypeIcon({ file, className = 'h-5 w-5' }: { file: CloudFile; classN
   }
   if (ext === '.excalidraw' || ext === '.drawio' || ext === '.mmd') {
     return <Workflow className={`${className} text-indigo-600 dark:text-indigo-400`} />;
+  }
+  if (['.sqlite', '.sqlite3', '.db'].includes(ext) || mime.includes('sqlite')) {
+    return <Database className={`${className} text-emerald-600 dark:text-emerald-400`} />;
   }
   if (mime.includes('spreadsheet') || ext === '.xlsx') {
     return <FileSpreadsheet className={`${className} text-emerald-600 dark:text-emerald-400`} />;
@@ -673,6 +677,20 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
               <>
                 <button
                   type="button"
+                  onClick={() =>
+                    openNewAppWindow({
+                      appId: 'sqlite',
+                      title: 'database.sqlite',
+                      targetFolderId: currentFolderId,
+                    })
+                  }
+                  className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                >
+                  <Database className="h-3.5 w-3.5 text-emerald-600" />
+                  <span className="hidden sm:inline">New SQLite DB</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => setNewFolderOpen(true)}
                   className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                 >
@@ -725,6 +743,7 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
               <option value="images">Images</option>
               <option value="archives">Archives (.zip)</option>
               <option value="diagrams">Diagrams</option>
+              <option value="databases">SQLite DBs (.sqlite, .db)</option>
             </select>
 
             <input

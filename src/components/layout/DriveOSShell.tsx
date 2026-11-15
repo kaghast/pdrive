@@ -1,6 +1,7 @@
 import {
   Archive,
   Clock,
+  Database,
   FileCode2,
   FileText,
   FolderOpen,
@@ -25,6 +26,7 @@ import { DocxViewer } from '../editors/DocxViewer';
 import { MarkdownEditor } from '../editors/MarkdownEditor';
 import { PdfStudio } from '../editors/PdfStudio';
 import { CodeFileEditor, ImageViewer } from '../editors/QuickPreviewEditors';
+import { SqliteStudio } from '../editors/SqliteStudio';
 import { FileExplorerView } from '../explorer/FileExplorerView';
 import { OfflineIndicator } from '../pwa/OfflineIndicator';
 import { PWAInstallButton } from '../pwa/PWAInstallButton';
@@ -145,6 +147,14 @@ export const DriveOSShell: React.FC = () => {
             targetFolderId={win.targetFolderId}
           />
         );
+      case 'sqlite':
+        return (
+          <SqliteStudio
+            key={win.id}
+            file={win.file}
+            targetFolderId={win.targetFolderId}
+          />
+        );
       case 'docx-viewer':
         return win.file ? <DocxViewer key={win.id} file={win.file} /> : null;
       case 'code':
@@ -202,6 +212,13 @@ export const DriveOSShell: React.FC = () => {
             icon: Workflow,
             action: () =>
               openNewAppWindow({ appId: 'mermaid', title: 'Diagram.mmd', targetFolderId: currentFolderId }),
+          },
+          {
+            title: 'SQLite Studio',
+            desc: 'Create new .sqlite databases, edit tables and rows visually, run SQL queries, and sync directly with Google Drive.',
+            icon: Database,
+            action: () =>
+              openNewAppWindow({ appId: 'sqlite', title: 'database.sqlite', targetFolderId: currentFolderId }),
           },
           {
             title: 'Archive Manager',

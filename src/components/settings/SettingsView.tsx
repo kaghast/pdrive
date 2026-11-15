@@ -17,7 +17,18 @@ interface AuditLogRow {
   createdAt: string;
 }
 
-const CONFIGURABLE_EXTENSIONS = ['.docx', '.md', '.pdf', '.zip', '.excalidraw', '.drawio', '.mmd', '.txt'];
+const CONFIGURABLE_EXTENSIONS = [
+  '.docx',
+  '.md',
+  '.pdf',
+  '.zip',
+  '.sqlite',
+  '.db',
+  '.excalidraw',
+  '.drawio',
+  '.mmd',
+  '.txt',
+];
 
 export const SettingsView: React.FC = () => {
   const {

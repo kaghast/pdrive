@@ -148,6 +148,9 @@ const DEFAULT_SETTINGS: UserSettings = {
     '.excalidraw': 'excalidraw',
     '.drawio': 'drawio',
     '.mmd': 'mermaid',
+    '.sqlite': 'sqlite',
+    '.sqlite3': 'sqlite',
+    '.db': 'sqlite',
   },
   dashboardLayout: [
     { id: 'quick-actions', title: 'Quick Actions', visible: true, size: 'lg', order: 0 },

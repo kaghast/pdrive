@@ -9,6 +9,7 @@ export type IntegratedAppId =
   | 'excalidraw'
   | 'drawio'
   | 'mermaid'
+  | 'sqlite'
   | 'docx-viewer'
   | 'word-online'
   | 'excel-online'
@@ -32,6 +33,7 @@ export const INTEGRATED_APPS: Record<IntegratedAppId, AppHandlerOption> = {
   excalidraw: { id: 'excalidraw', label: 'Excalidraw', description: 'Freehand visual diagram editor' },
   drawio: { id: 'drawio', label: 'Draw.io', description: 'Technical architecture & UML diagrams' },
   mermaid: { id: 'mermaid', label: 'Mermaid Studio', description: 'Code-driven flow & sequence diagrams' },
+  sqlite: { id: 'sqlite', label: 'SQLite Studio', description: 'Create, browse, query & edit SQLite databases' },
   'docx-viewer': { id: 'docx-viewer', label: 'Built-in DOCX Viewer', description: 'Read & convert Word files without Microsoft Azure' },
   'word-online': { id: 'word-online', label: 'Microsoft Word Online', description: 'Real Word Online via temporary OneDrive sync' },
   'excel-online': { id: 'excel-online', label: 'Microsoft Excel Online', description: 'Open spreadsheet in web viewer' },
@@ -82,6 +84,12 @@ export function getCompatibleApps(file: CloudFile): AppHandlerOption[] {
   }
   if (ext === '.mmd' || ext === '.mermaid') {
     return [INTEGRATED_APPS.mermaid, INTEGRATED_APPS.code];
+  }
+  if (
+    ['.sqlite', '.sqlite3', '.db'].includes(ext) ||
+    mime.includes('sqlite')
+  ) {
+    return [INTEGRATED_APPS.sqlite];
   }
   if (mime.startsWith('image/') || ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg'].includes(ext)) {
     return [INTEGRATED_APPS.image, ...(ext === '.svg' ? [INTEGRATED_APPS.code] : [])];

@@ -1,4 +1,4 @@
-import { pool } from './index.ts';
+import { getSqlConnectionConfig, pool } from './index.ts';
 import { DEFAULT_DASHBOARD_LAYOUT, DEFAULT_OPEN_WITH } from './schema.ts';
 
 const SCHEMA_STATEMENTS: string[] = [
@@ -115,7 +115,8 @@ const SCHEMA_STATEMENTS: string[] = [
  * Safe to run on every redeploy: uses CREATE ... IF NOT EXISTS and never drops/truncates existing data.
  */
 export async function ensureDatabaseSchema(maxAttempts = 6, delayMs = 2000): Promise<void> {
-  if (!process.env.SQL_HOST || !process.env.SQL_DB_NAME) {
+  const cfg = getSqlConnectionConfig();
+  if (!cfg.host || !cfg.database) {
     console.warn('[DB] SQL_HOST or SQL_DB_NAME is not set; skipping automatic schema bootstrap.');
     return;
   }

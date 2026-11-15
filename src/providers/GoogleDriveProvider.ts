@@ -111,6 +111,8 @@ export class GoogleDriveProvider implements StorageProvider {
         clauses.push(`(mimeType = 'application/zip' or mimeType = 'application/x-zip-compressed' or name contains '.zip')`);
       } else if (query.mimeFilter === 'diagrams') {
         clauses.push(`(name contains '.excalidraw' or name contains '.drawio' or name contains '.mmd')`);
+      } else if (query.mimeFilter === 'databases') {
+        clauses.push(`(name contains '.sqlite' or name contains '.db' or mimeType contains 'sqlite')`);
       }
     }
 

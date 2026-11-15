@@ -5,7 +5,7 @@ import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { ensureDatabaseSchema } from './src/db/bootstrap.ts';
-import { pool } from './src/db/index.ts';
+import { getSqlConnectionConfig, pool } from './src/db/index.ts';
 import { getPublicFirebaseConfig } from './src/lib/firebase-config.ts';
 import { archiveRouter } from './src/server/routes/archive.ts';
 import { metadataRouter } from './src/server/routes/metadata.ts';
@@ -36,13 +36,34 @@ async function startServer() {
   app.use('/api', apiLimiter);
 
   app.get('/api/health', async (_req, res) => {
+    const cfg = getSqlConnectionConfig();
+    if (!cfg.host || !cfg.database) {
+      return res.json({
+        ok: true,
+        service: 'personal-drive-os',
+        database: 'unconfigured',
+      });
+    }
     try {
       await pool.query('SELECT 1');
       res.json({ ok: true, service: 'personal-drive-os', database: 'connected' });
     } catch (err: any) {
+      res.json({
+        ok: true,
+        service: 'personal-drive-os',
+        database: 'disconnected',
+        error: err?.message || 'Database unavailable',
+      });
+    }
+  });
+
+  app.get('/api/health/db', async (_req, res) => {
+    try {
+      await pool.query('SELECT 1');
+      res.json({ ok: true, database: 'connected' });
+    } catch (err: any) {
       res.status(503).json({
         ok: false,
-        service: 'personal-drive-os',
         database: 'disconnected',
         error: err?.message || 'Database unavailable',
       });
