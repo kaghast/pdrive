@@ -21,6 +21,7 @@ import { ActiveNavView, useDriveOS, WorkspaceWindow } from '../../contexts/Drive
 import { DashboardView } from '../dashboard/DashboardView';
 import { ArchiveManager } from '../editors/ArchiveManager';
 import { DiagramStudio } from '../editors/DiagramStudio';
+import { DocxViewer } from '../editors/DocxViewer';
 import { MarkdownEditor } from '../editors/MarkdownEditor';
 import { PdfStudio } from '../editors/PdfStudio';
 import { CodeFileEditor, ImageViewer } from '../editors/QuickPreviewEditors';
@@ -144,6 +145,8 @@ export const DriveOSShell: React.FC = () => {
             targetFolderId={win.targetFolderId}
           />
         );
+      case 'docx-viewer':
+        return win.file ? <DocxViewer key={win.id} file={win.file} /> : null;
       case 'code':
         return win.file ? <CodeFileEditor key={win.id} file={win.file} /> : null;
       case 'image':

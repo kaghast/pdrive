@@ -21,7 +21,10 @@ import {
 export const microsoftRouter = Router();
 
 // In-memory state map (also paired with signed HttpOnly cookie) for short-lived OAuth popups
-const pendingOAuthStates = new Map<string, { userId: number; expiresAt: number }>();
+const pendingOAuthStates = new Map<
+  string,
+  { userId: number; codeVerifier: string; expiresAt: number }
+>();
 
 microsoftRouter.get('/status', requireAuth, async (req: AuthRequest, res) => {
   try {
@@ -41,14 +44,18 @@ microsoftRouter.get('/status', requireAuth, async (req: AuthRequest, res) => {
 microsoftRouter.get('/auth-url', requireAuth, (req: AuthRequest, res) => {
   if (!isMicrosoftConfigured()) {
     return res.status(400).json({
-      error: 'Microsoft OAuth is not configured. Set MS_CLIENT_ID and MS_CLIENT_SECRET.',
+      error: 'Microsoft OAuth is not configured. Set MS_CLIENT_ID (and MS_CLIENT_SECRET for Web apps).',
       redirectUri: getMicrosoftRedirectUri(),
     });
   }
 
   const state = crypto.randomBytes(24).toString('hex');
+  const codeVerifier = crypto.randomBytes(32).toString('base64url');
+  const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+
   pendingOAuthStates.set(state, {
     userId: req.dbUser!.id,
+    codeVerifier,
     expiresAt: Date.now() + 10 * 60 * 1000,
   });
 
@@ -66,6 +73,8 @@ microsoftRouter.get('/auth-url', requireAuth, (req: AuthRequest, res) => {
     response_mode: 'query',
     scope: MS_SCOPES,
     state,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
     prompt: 'select_account',
   });
 
@@ -103,7 +112,7 @@ const callbackHandler = async (req: any, res: any) => {
   }
 
   try {
-    const tokens = await exchangeMicrosoftCode(code);
+    const tokens = await exchangeMicrosoftCode(code, pending.codeVerifier);
     const profile = await fetchMicrosoftProfile(tokens.access_token);
     const accountEmail = profile.mail || profile.userPrincipalName || null;
 

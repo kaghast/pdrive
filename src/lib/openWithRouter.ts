@@ -9,6 +9,7 @@ export type IntegratedAppId =
   | 'excalidraw'
   | 'drawio'
   | 'mermaid'
+  | 'docx-viewer'
   | 'word-online'
   | 'excel-online'
   | 'powerpoint-online'
@@ -31,6 +32,7 @@ export const INTEGRATED_APPS: Record<IntegratedAppId, AppHandlerOption> = {
   excalidraw: { id: 'excalidraw', label: 'Excalidraw', description: 'Freehand visual diagram editor' },
   drawio: { id: 'drawio', label: 'Draw.io', description: 'Technical architecture & UML diagrams' },
   mermaid: { id: 'mermaid', label: 'Mermaid Studio', description: 'Code-driven flow & sequence diagrams' },
+  'docx-viewer': { id: 'docx-viewer', label: 'Built-in DOCX Viewer', description: 'Read & convert Word files without Microsoft Azure' },
   'word-online': { id: 'word-online', label: 'Microsoft Word Online', description: 'Real Word Online via temporary OneDrive sync' },
   'excel-online': { id: 'excel-online', label: 'Microsoft Excel Online', description: 'Open spreadsheet in web viewer' },
   'powerpoint-online': { id: 'powerpoint-online', label: 'Microsoft PowerPoint Online', description: 'Open presentation in web viewer' },
@@ -61,7 +63,7 @@ export function getCompatibleApps(file: CloudFile): AppHandlerOption[] {
   }
 
   if (ext === '.docx' || ext === '.doc' || mime.includes('wordprocessingml')) {
-    return [INTEGRATED_APPS['word-online'], INTEGRATED_APPS.external];
+    return [INTEGRATED_APPS['word-online'], INTEGRATED_APPS['docx-viewer'], INTEGRATED_APPS.external];
   }
   if (ext === '.md' || ext === '.markdown' || mime === 'text/markdown') {
     return [INTEGRATED_APPS.markdown, INTEGRATED_APPS.code];

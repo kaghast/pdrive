@@ -576,11 +576,21 @@ export const DriveOSProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
 
       recordRecent(file);
-      const targetApp = appOverride || resolveOpenWithApp(file, settings.defaultOpenWith);
+      let targetApp = appOverride || resolveOpenWithApp(file, settings.defaultOpenWith);
 
       if (targetApp === 'word-online') {
-        startWordOnlineSession(file);
-        return;
+        if (!appOverride && !microsoftStatus.connected) {
+          if (file.mimeType === 'application/vnd.google-apps.document') {
+            targetApp = 'google-docs-export';
+            toast.info('Word Online is not connected — opened Google Docs preview instead.');
+          } else {
+            targetApp = 'docx-viewer';
+            toast.info('Word Online is not connected — opened in Built-in DOCX Viewer.');
+          }
+        } else {
+          startWordOnlineSession(file);
+          return;
+        }
       }
 
       if (targetApp === 'external' || targetApp === 'excel-online' || targetApp === 'powerpoint-online') {
@@ -599,7 +609,14 @@ export const DriveOSProvider: React.FC<{ children: React.ReactNode }> = ({ child
         targetFolderId: file.parents?.[0] || currentFolderId,
       });
     },
-    [currentFolderId, openNewAppWindow, recordRecent, settings.defaultOpenWith, startWordOnlineSession]
+    [
+      currentFolderId,
+      microsoftStatus.connected,
+      openNewAppWindow,
+      recordRecent,
+      settings.defaultOpenWith,
+      startWordOnlineSession,
+    ]
   );
 
   return (

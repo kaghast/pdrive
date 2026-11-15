@@ -4,7 +4,7 @@ import { getConnectedAccount, upsertConnectedAccount } from '../../db/repositori
 export const MS_SCOPES = 'offline_access User.Read Files.ReadWrite';
 
 export function isMicrosoftConfigured(): boolean {
-  return Boolean(process.env.MS_CLIENT_ID && process.env.MS_CLIENT_SECRET);
+  return Boolean(process.env.MS_CLIENT_ID);
 }
 
 export function getMicrosoftRedirectUri(): string {
@@ -17,15 +17,22 @@ export function getMicrosoftAuthority(): string {
   return `https://login.microsoftonline.com/${tenant}/oauth2/v2.0`;
 }
 
-export async function exchangeMicrosoftCode(code: string) {
-  const body = new URLSearchParams({
+export async function exchangeMicrosoftCode(code: string, codeVerifier?: string) {
+  const params: Record<string, string> = {
     client_id: process.env.MS_CLIENT_ID!,
-    client_secret: process.env.MS_CLIENT_SECRET!,
     code,
     redirect_uri: getMicrosoftRedirectUri(),
     grant_type: 'authorization_code',
     scope: MS_SCOPES,
-  });
+  };
+  if (process.env.MS_CLIENT_SECRET) {
+    params.client_secret = process.env.MS_CLIENT_SECRET;
+  }
+  if (codeVerifier) {
+    params.code_verifier = codeVerifier;
+  }
+
+  const body = new URLSearchParams(params);
 
   const res = await fetch(`${getMicrosoftAuthority()}/token`, {
     method: 'POST',
@@ -63,13 +70,16 @@ export async function getValidMicrosoftToken(userId: number): Promise<string> {
   }
 
   const refreshToken = decryptToken(acct.refreshTokenEnc);
-  const body = new URLSearchParams({
+  const refreshParams: Record<string, string> = {
     client_id: process.env.MS_CLIENT_ID!,
-    client_secret: process.env.MS_CLIENT_SECRET!,
     refresh_token: refreshToken,
     grant_type: 'refresh_token',
     scope: MS_SCOPES,
-  });
+  };
+  if (process.env.MS_CLIENT_SECRET) {
+    refreshParams.client_secret = process.env.MS_CLIENT_SECRET;
+  }
+  const body = new URLSearchParams(refreshParams);
 
   const res = await fetch(`${getMicrosoftAuthority()}/token`, {
     method: 'POST',

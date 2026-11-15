@@ -160,7 +160,7 @@ export const SettingsView: React.FC = () => {
                 <p className="text-xs text-slate-600 dark:text-slate-300">
                   {microsoftStatus.configured
                     ? 'Ready to connect your Microsoft account for Word Online editing.'
-                    : 'Set MS_CLIENT_ID and MS_CLIENT_SECRET in your server environment to enable Word Online.'}
+                    : 'Optional: Word Online requires MS_CLIENT_ID (and MS_CLIENT_SECRET for Web apps). Without it, .docx files automatically open in the Built-in DOCX Viewer & Google Docs.'}
                 </p>
                 <button
                   type="button"
@@ -173,6 +173,17 @@ export const SettingsView: React.FC = () => {
                 </button>
               </div>
             )}
+          </div>
+
+          <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs leading-relaxed text-slate-600 dark:border-slate-800 dark:bg-slate-900/30 dark:text-slate-400">
+            <span className="font-semibold text-slate-800 dark:text-slate-200">
+              Using a school/university account without Admin Panel?
+            </span>{' '}
+            School tenants typically block Azure app registrations. You can still view &amp; convert{' '}
+            <code className="font-mono">.docx</code> files via the Built-in DOCX Viewer or Google Docs,
+            or register a free app at <code className="font-mono">entra.microsoft.com</code> using a
+            personal <code className="font-mono">@outlook.com</code> account (with{' '}
+            <code className="font-mono">MS_TENANT_ID=consumers</code>) as temporary scratch storage.
           </div>
 
           {microsoftStatus.redirectUri && (

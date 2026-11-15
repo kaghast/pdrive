@@ -163,7 +163,7 @@ export const WordSyncView: React.FC = () => {
             Refresh Sessions
           </button>
 
-          {!microsoftStatus.connected && (
+          {!microsoftStatus.connected && microsoftStatus.configured && (
             <button
               type="button"
               onClick={connectMicrosoft}
@@ -175,6 +175,22 @@ export const WordSyncView: React.FC = () => {
           )}
         </div>
       </div>
+
+      {!microsoftStatus.configured && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 text-xs leading-relaxed text-slate-600 dark:border-slate-800 dark:bg-[#14171F] dark:text-slate-300">
+          <p className="font-semibold text-slate-900 dark:text-slate-100">
+            Microsoft OneDrive bridge is optional
+          </p>
+          <p className="mt-1">
+            No <code className="font-mono">MS_CLIENT_ID</code> is configured on the server. All{' '}
+            <code className="font-mono">.docx</code> files open automatically in the Built-in DOCX Viewer
+            (with Markdown Studio conversion and Google Docs support) without needing school Azure admin access.
+            To enable Word Online later, create a free app using a personal{' '}
+            <code className="font-mono">@outlook.com</code> account and set{' '}
+            <code className="font-mono">MS_TENANT_ID=consumers</code>.
+          </p>
+        </div>
+      )}
 
       {/* Sessions List */}
       <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-[#14171F]">

@@ -4,6 +4,8 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
+import { ensureDatabaseSchema } from './src/db/bootstrap.ts';
+import { pool } from './src/db/index.ts';
 import { archiveRouter } from './src/server/routes/archive.ts';
 import { metadataRouter } from './src/server/routes/metadata.ts';
 import { microsoftRouter } from './src/server/routes/microsoft.ts';
@@ -15,6 +17,8 @@ dotenv.config();
 const PORT = Number(process.env.PORT) || 3000;
 
 async function startServer() {
+  await ensureDatabaseSchema();
+
   const app = express();
 
   app.set('trust proxy', 1);
@@ -30,8 +34,18 @@ async function startServer() {
 
   app.use('/api', apiLimiter);
 
-  app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, service: 'personal-drive-os' });
+  app.get('/api/health', async (_req, res) => {
+    try {
+      await pool.query('SELECT 1');
+      res.json({ ok: true, service: 'personal-drive-os', database: 'connected' });
+    } catch (err: any) {
+      res.status(503).json({
+        ok: false,
+        service: 'personal-drive-os',
+        database: 'disconnected',
+        error: err?.message || 'Database unavailable',
+      });
+    }
   });
 
   app.use('/api/user', userRouter);
