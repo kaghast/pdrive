@@ -84,6 +84,37 @@ metadataRouter.post('/tags', async (req: AuthRequest, res) => {
   }
 });
 
+metadataRouter.post('/folder-style', async (req: AuthRequest, res) => {
+  try {
+    const parsed = fileRefSchema
+      .extend({
+        folderIcon: z.string().trim().max(40).nullable().optional(),
+        folderColor: z.string().trim().max(24).nullable().optional(),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid folder style payload' });
+    }
+    const item = await upsertFileMetadata(req.dbUser!.id, parsed.data);
+    await writeAuditLog({
+      userId: req.dbUser!.id,
+      action: 'FOLDER_STYLE_UPDATED',
+      targetType: 'drive_folder',
+      targetId: parsed.data.fileId,
+      targetName: parsed.data.fileName,
+      status: 'success',
+      details: {
+        folderIcon: parsed.data.folderIcon ?? null,
+        folderColor: parsed.data.folderColor ?? null,
+      },
+      ipAddress: req.ip,
+    });
+    res.json({ item });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to update folder appearance' });
+  }
+});
+
 metadataRouter.post('/recent', async (req: AuthRequest, res) => {
   try {
     const parsed = fileRefSchema.safeParse(req.body);

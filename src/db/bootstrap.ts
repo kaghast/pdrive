@@ -51,9 +51,14 @@ const SCHEMA_STATEMENTS: string[] = [
     "is_favorite" boolean DEFAULT false NOT NULL,
     "is_pinned" boolean DEFAULT false NOT NULL,
     "tags" jsonb DEFAULT '[]'::jsonb NOT NULL,
+    "folder_icon" text,
+    "folder_color" text,
     "last_opened_at" timestamp,
     "updated_at" timestamp DEFAULT now() NOT NULL
   );`,
+
+  `ALTER TABLE "file_metadata" ADD COLUMN IF NOT EXISTS "folder_icon" text;`,
+  `ALTER TABLE "file_metadata" ADD COLUMN IF NOT EXISTS "folder_color" text;`,
 
   `CREATE UNIQUE INDEX IF NOT EXISTS "file_metadata_user_provider_file_idx"
     ON "file_metadata" ("user_id", "provider", "file_id");`,

@@ -5,7 +5,7 @@ const DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 
 const FILE_FIELDS =
-  'id,name,mimeType,size,modifiedTime,createdTime,md5Checksum,parents,thumbnailLink,iconLink,webViewLink,trashed';
+  'id,name,mimeType,size,modifiedTime,createdTime,md5Checksum,parents,thumbnailLink,iconLink,webViewLink,trashed,folderColorRgb';
 
 function toCloudFile(raw: any): CloudFile {
   const mimeType = raw.mimeType || 'application/octet-stream';
@@ -22,6 +22,7 @@ function toCloudFile(raw: any): CloudFile {
     iconLink: raw.iconLink,
     webViewLink: raw.webViewLink,
     trashed: Boolean(raw.trashed),
+    folderColorRgb: raw.folderColorRgb || undefined,
     provider: 'google-drive',
     isFolder: mimeType === FOLDER_MIME,
     isGoogleWorkspaceDoc: mimeType.startsWith('application/vnd.google-apps.') && mimeType !== FOLDER_MIME,
@@ -168,7 +169,7 @@ export class GoogleDriveProvider implements StorageProvider {
 
     const params = new URLSearchParams({
       q: `mimeType = '${FOLDER_MIME}' and trashed = false`,
-      fields: 'files(id,name,mimeType,parents,modifiedTime)',
+      fields: 'files(id,name,mimeType,parents,modifiedTime,folderColorRgb)',
       pageSize: '1000',
       orderBy: 'name',
     });
@@ -276,6 +277,43 @@ export class GoogleDriveProvider implements StorageProvider {
       body: JSON.stringify({ name: newName }),
     });
     return toCloudFile(await res.json());
+  }
+
+  async updateFolderColor(fileId: string, folderColorRgb: string): Promise<CloudFile> {
+    const res = await this.request(`${DRIVE_API}/files/${encodeURIComponent(fileId)}?fields=${FILE_FIELDS}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folderColorRgb }),
+    });
+    return toCloudFile(await res.json());
+  }
+
+  async getFolderColorPalette(): Promise<string[]> {
+    try {
+      const res = await this.request(`${DRIVE_API}/about?fields=folderColorPalette`);
+      const data = await res.json();
+      if (Array.isArray(data?.folderColorPalette) && data.folderColorPalette.length > 0) {
+        return data.folderColorPalette;
+      }
+    } catch {
+      // fall back to static palette
+    }
+    return [];
+  }
+
+  async getRootFolderId(): Promise<string | null> {
+    if (this.rootFolderId) return this.rootFolderId;
+    try {
+      const rootRes = await this.request(`${DRIVE_API}/files/root?fields=id`);
+      const rootData = await rootRes.json();
+      if (rootData?.id) {
+        this.rootFolderId = rootData.id;
+        return this.rootFolderId;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
   }
 
   async moveFile(

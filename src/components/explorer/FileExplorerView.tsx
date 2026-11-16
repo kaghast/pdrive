@@ -3,6 +3,7 @@ import {
   Archive,
   BookOpen,
   CheckSquare,
+  ChevronDown,
   ChevronRight,
   Copy,
   Database,
@@ -15,11 +16,13 @@ import {
   FileText,
   Folder,
   FolderInput,
+  FolderOpen,
   FolderPlus,
   Grid2x2,
   Info,
   List,
   MoreVertical,
+  Palette,
   Pin,
   Plus,
   RefreshCw,
@@ -37,16 +40,34 @@ import {
 } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { useDriveOS } from '../../contexts/DriveOSContext';
+import { FileMetadataRecord, useDriveOS } from '../../contexts/DriveOSContext';
 import { apiFetch } from '../../lib/apiClient';
+import { FolderGlyph } from '../../lib/folderAppearance';
 import { getCompatibleApps } from '../../lib/openWithRouter';
 import { formatBytes, formatRelativeDate, getFileExtension } from '../../lib/utils';
 import { CloudFile } from '../../providers/StorageProvider';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { FolderAppearanceDialog } from './FolderAppearanceDialog';
 import { MoveItemsDialog } from './MoveItemsDialog';
 
-function FileTypeIcon({ file, className = 'h-5 w-5' }: { file: CloudFile; className?: string }) {
-  if (file.isFolder) return <Folder className={`${className} text-blue-600 dark:text-blue-400`} />;
+function FileTypeIcon({
+  file,
+  meta,
+  className = 'h-5 w-5',
+}: {
+  file: CloudFile;
+  meta?: FileMetadataRecord;
+  className?: string;
+}) {
+  if (file.isFolder) {
+    return (
+      <FolderGlyph
+        iconName={meta?.folderIcon}
+        color={meta?.folderColor || file.folderColorRgb}
+        className={className}
+      />
+    );
+  }
   const ext = getFileExtension(file.name);
   const mime = file.mimeType.toLowerCase();
   if (mime.startsWith('image/') || ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg'].includes(ext)) {
@@ -86,11 +107,15 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
     settings,
     currentFolderId,
     setCurrentFolderId,
+    allFolders,
+    focusedExplorerFile,
+    setFocusedExplorerFile,
     metadataMap,
     metadataList,
     toggleFavorite,
     togglePin,
     updateTags,
+    updateFolderAppearance,
     openFileWithApp,
     openNewAppWindow,
     explorerRefreshTick,
@@ -102,6 +127,7 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
   const [breadcrumbs, setBreadcrumbs] = useState<{ id: string; name: string }[]>([
     { id: 'root', name: 'My Drive' },
   ]);
+  const [openCrumbMenuId, setOpenCrumbMenuId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>(settings.defaultViewMode);
   const [showTree, setShowTree] = useState(true);
@@ -135,6 +161,7 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
   const [newFolderName, setNewFolderName] = useState('');
   const [renameTarget, setRenameTarget] = useState<CloudFile | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [appearanceTarget, setAppearanceTarget] = useState<CloudFile | null>(null);
   const [moveTargets, setMoveTargets] = useState<CloudFile[] | null>(null);
   const [moveInitialFolderId, setMoveInitialFolderId] = useState('root');
   const [bulkRenameOpen, setBulkRenameOpen] = useState(false);
@@ -264,25 +291,78 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
     loadFolderTree();
   }, [loadFiles, loadFolderTree, explorerRefreshTick]);
 
-  // Build breadcrumbs when currentFolderId changes
+  const mergedFolders = useMemo(() => {
+    const map = new Map<string, CloudFile>();
+    for (const f of allFolders) map.set(f.id, f);
+    for (const f of folders) map.set(f.id, f);
+    return Array.from(map.values());
+  }, [allFolders, folders]);
+
+  const activeBreadcrumbFile = useMemo(() => {
+    if (inspectorFile && !inspectorFile.isFolder) return inspectorFile;
+    if (focusedExplorerFile && !focusedExplorerFile.isFolder) return focusedExplorerFile;
+    return null;
+  }, [focusedExplorerFile, inspectorFile]);
+
+  const navigateToFolder = useCallback(
+    (folderId: string) => {
+      setSelectedTag(null);
+      setOpenCrumbMenuId(null);
+      setInspectorFile(null);
+      setFocusedExplorerFile(null);
+      setCurrentFolderId(folderId);
+    },
+    [setCurrentFolderId, setFocusedExplorerFile]
+  );
+
+  // Build directory breadcrumbs from current folder OR active/selected file parent
   useEffect(() => {
-    if (currentFolderId === 'root') {
+    let cancelled = false;
+    const targetFolderId =
+      activeBreadcrumbFile?.parents?.[0] && (search.trim() || selectedTag || mode !== 'drive')
+        ? activeBreadcrumbFile.parents[0]
+        : currentFolderId;
+
+    if (!targetFolderId || targetFolderId === 'root') {
       setBreadcrumbs([{ id: 'root', name: 'My Drive' }]);
       return;
     }
-    const map = new Map(folders.map((f) => [f.id, f]));
-    const trail: { id: string; name: string }[] = [];
-    let cursor: string | undefined = currentFolderId;
-    let guard = 0;
-    while (cursor && cursor !== 'root' && guard < 12) {
-      const node = map.get(cursor);
-      if (!node) break;
-      trail.unshift({ id: node.id, name: node.name });
-      cursor = node.parents?.[0];
-      guard++;
-    }
-    setBreadcrumbs([{ id: 'root', name: 'My Drive' }, ...trail]);
-  }, [currentFolderId, folders]);
+
+    const resolveBreadcrumbs = async () => {
+      const map = new Map(mergedFolders.map((f) => [f.id, f]));
+      const trail: { id: string; name: string }[] = [];
+      let cursor: string | undefined = targetFolderId;
+      const seen = new Set<string>();
+
+      while (cursor && cursor !== 'root' && !seen.has(cursor) && trail.length < 15) {
+        seen.add(cursor);
+        let node = map.get(cursor);
+        if (!node) {
+          try {
+            const fetched = await storageProvider.getFile(cursor);
+            if (fetched && fetched.isFolder) {
+              node = fetched;
+              map.set(fetched.id, fetched);
+            }
+          } catch {
+            break;
+          }
+        }
+        if (!node) break;
+        trail.unshift({ id: node.id, name: node.name });
+        cursor = node.parents?.[0];
+      }
+
+      if (!cancelled) {
+        setBreadcrumbs([{ id: 'root', name: 'My Drive' }, ...trail]);
+      }
+    };
+
+    resolveBreadcrumbs();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBreadcrumbFile, currentFolderId, mergedFolders, mode, search, selectedTag, storageProvider]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -296,6 +376,7 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
       } else if (e.key === 'Escape') {
         setSelectedIds(new Set());
         setContextMenu(null);
+        setOpenCrumbMenuId(null);
       } else if (e.key === '/') {
         e.preventDefault();
         searchInputRef.current?.focus();
@@ -520,7 +601,10 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
           handleUploadFiles(e.dataTransfer.files);
         }
       }}
-      onClick={() => setContextMenu(null)}
+      onClick={() => {
+        setContextMenu(null);
+        setOpenCrumbMenuId(null);
+      }}
     >
       {/* Left Split Panel: Favorites (Top) & Tag Chips (Bottom) */}
       {mode === 'drive' && showTree && (
@@ -553,7 +637,7 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
                       onClick={() => {
                         setSelectedTag(null);
                         if (isFolder) {
-                          setCurrentFolderId(fav.fileId);
+                          navigateToFolder(fav.fileId);
                         } else {
                           storageProvider
                             .getFile(fav.fileId)
@@ -568,7 +652,11 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
                       }`}
                     >
                       {isFolder ? (
-                        <Folder className="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+                        <FolderGlyph
+                          iconName={fav.folderIcon}
+                          color={fav.folderColor}
+                          className="h-3.5 w-3.5 shrink-0"
+                        />
                       ) : (
                         <FileText className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                       )}
@@ -642,16 +730,17 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
 
         {/* Top Explorer Bar */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-          {/* Breadcrumbs */}
-          <div className="flex min-w-0 items-center gap-1 text-sm">
+          {/* Directory Breadcrumbs & Folder Submenu */}
+          <div className="flex min-w-0 flex-wrap items-center gap-1 text-sm">
             {mode === 'drive' && selectedTag ? (
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => setSelectedTag(null)}
-                  className="rounded-lg px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
                 >
-                  My Drive
+                  <FolderOpen className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                  <span>My Drive</span>
                 </button>
                 <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
@@ -665,30 +754,136 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
                     <X className="h-3 w-3" />
                   </button>
                 </span>
+                {activeBreadcrumbFile && (
+                  <>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+                    <button
+                      type="button"
+                      onClick={() => openFileWithApp(activeBreadcrumbFile)}
+                      title={`Open ${activeBreadcrumbFile.name}`}
+                      className="inline-flex max-w-[220px] items-center gap-1.5 rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-800 hover:bg-blue-50 hover:text-blue-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-blue-950/50"
+                    >
+                      <FileTypeIcon file={activeBreadcrumbFile} className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{activeBreadcrumbFile.name}</span>
+                    </button>
+                  </>
+                )}
               </div>
             ) : mode === 'drive' ? (
-              breadcrumbs.map((crumb, idx) => (
-                <React.Fragment key={crumb.id}>
-                  {idx > 0 && <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />}
-                  <button
-                    type="button"
-                    onClick={() => setCurrentFolderId(crumb.id)}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      setDragOverFolderId(crumb.id);
-                    }}
-                    onDragLeave={() => setDragOverFolderId(null)}
-                    onDrop={(e) => handleDropOnFolder(e, crumb.id)}
-                    className={`truncate rounded-lg px-2 py-1 text-xs font-medium transition ${
-                      idx === breadcrumbs.length - 1
-                        ? 'text-slate-900 dark:text-slate-100'
-                        : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
-                    } ${dragOverFolderId === crumb.id ? 'ring-2 ring-blue-500' : ''}`}
-                  >
-                    {crumb.name}
-                  </button>
-                </React.Fragment>
-              ))
+              <>
+                {breadcrumbs.map((crumb, idx) => {
+                  const isLastFolder = idx === breadcrumbs.length - 1 && !activeBreadcrumbFile;
+                  const childFolders = mergedFolders
+                    .filter((f) => {
+                      const pid = f.parents?.[0];
+                      if (crumb.id === 'root') {
+                        return !pid || !mergedFolders.some((other) => other.id === pid);
+                      }
+                      return pid === crumb.id;
+                    })
+                    .sort((a, b) => a.name.localeCompare(b.name));
+                  const isMenuOpen = openCrumbMenuId === crumb.id;
+
+                  return (
+                    <React.Fragment key={crumb.id}>
+                      {idx > 0 && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />}
+                      <div className="relative flex items-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearch('');
+                            navigateToFolder(crumb.id);
+                          }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            setDragOverFolderId(crumb.id);
+                          }}
+                          onDragLeave={() => setDragOverFolderId(null)}
+                          onDrop={(e) => handleDropOnFolder(e, crumb.id)}
+                          className={`inline-flex max-w-[180px] items-center gap-1.5 truncate rounded-l-lg px-2 py-1 text-xs font-medium transition ${
+                            isLastFolder
+                              ? 'bg-slate-100/80 text-slate-900 dark:bg-slate-800 dark:text-slate-100'
+                              : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                          } ${dragOverFolderId === crumb.id ? 'ring-2 ring-blue-500' : ''}`}
+                        >
+                          {idx === 0 && (
+                            <FolderOpen className="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+                          )}
+                          <span className="truncate">{crumb.name}</span>
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Browse subfolders of ${crumb.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenCrumbMenuId((prev) => (prev === crumb.id ? null : crumb.id));
+                          }}
+                          className={`rounded-r-lg px-1 py-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 ${
+                            isMenuOpen ? 'bg-slate-100 text-blue-600 dark:bg-slate-800 dark:text-blue-400' : ''
+                          }`}
+                        >
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        </button>
+
+                        {isMenuOpen && (
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute left-0 top-full z-40 mt-1.5 max-h-64 w-60 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-800 dark:bg-[#14171F]"
+                          >
+                            <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                              Subfolders in {crumb.name}
+                            </p>
+                            {childFolders.length === 0 ? (
+                              <p className="px-2 py-2 text-xs text-slate-400">No subfolders</p>
+                            ) : (
+                              childFolders.map((sub) => {
+                                const subMeta = metadataMap.get(sub.id);
+                                return (
+                                  <button
+                                    key={sub.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setSearch('');
+                                      navigateToFolder(sub.id);
+                                    }}
+                                    className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition ${
+                                      currentFolderId === sub.id
+                                        ? 'bg-blue-50 font-semibold text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
+                                        : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
+                                    }`}
+                                  >
+                                    <FolderGlyph
+                                      iconName={subMeta?.folderIcon}
+                                      color={subMeta?.folderColor || sub.folderColorRgb}
+                                      className="h-3.5 w-3.5 shrink-0"
+                                    />
+                                    <span className="truncate">{sub.name}</span>
+                                  </button>
+                                );
+                              })
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </React.Fragment>
+                  );
+                })}
+
+                {activeBreadcrumbFile && (
+                  <>
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <button
+                      type="button"
+                      onClick={() => openFileWithApp(activeBreadcrumbFile)}
+                      title={`Open ${activeBreadcrumbFile.name}`}
+                      className="inline-flex max-w-[220px] items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 dark:bg-blue-950/50 dark:text-blue-300 dark:hover:bg-blue-950/80"
+                    >
+                      <FileTypeIcon file={activeBreadcrumbFile} className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{activeBreadcrumbFile.name}</span>
+                    </button>
+                  </>
+                )}
+              </>
             ) : (
               <span className="font-display text-sm font-semibold capitalize text-slate-900 dark:text-slate-100">
                 {mode === 'favorites'
@@ -1086,7 +1281,10 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
                     onDrop={(e) => file.isFolder && handleDropOnFolder(e, file.id)}
                     onClick={(e) => {
                       if (e.metaKey || e.ctrlKey) toggleSelect(file.id, true);
-                      else setInspectorFile(file);
+                      else {
+                        setInspectorFile(file);
+                        setFocusedExplorerFile(file.isFolder ? null : file);
+                      }
                     }}
                     onDoubleClick={() => openFileWithApp(file)}
                     onContextMenu={(e) => {
@@ -1121,7 +1319,7 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
                         {isSelected ? (
                           <CheckSquare className="h-4 w-4 text-blue-600" />
                         ) : (
-                          <FileTypeIcon file={file} className="h-5 w-5" />
+                          <FileTypeIcon file={file} meta={meta} className="h-5 w-5" />
                         )}
                       </button>
 
@@ -1211,7 +1409,10 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
                       }}
                       onDragLeave={() => setDragOverFolderId(null)}
                       onDrop={(e) => file.isFolder && handleDropOnFolder(e, file.id)}
-                      onClick={() => setInspectorFile(file)}
+                      onClick={() => {
+                        setInspectorFile(file);
+                        setFocusedExplorerFile(file.isFolder ? null : file);
+                      }}
                       onDoubleClick={() => openFileWithApp(file)}
                       onContextMenu={(e) => {
                         e.preventDefault();
@@ -1241,7 +1442,7 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
                       </td>
                       <td className={viewMode === 'compact' ? 'px-3 py-1.5' : 'px-3 py-2.5'}>
                         <div className="flex items-center gap-2.5">
-                          <FileTypeIcon file={file} className="h-4 w-4 shrink-0" />
+                          <FileTypeIcon file={file} meta={meta} className="h-4 w-4 shrink-0" />
                           <span className="truncate font-medium text-slate-900 dark:text-slate-100">
                             {file.name}
                           </span>
@@ -1288,7 +1489,11 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
         <aside className="hidden w-72 shrink-0 flex-col overflow-y-auto border-l border-slate-200 p-4 xl:flex dark:border-slate-800">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2.5">
-              <FileTypeIcon file={inspectorFile} className="h-6 w-6" />
+              <FileTypeIcon
+                file={inspectorFile}
+                meta={metadataMap.get(inspectorFile.id)}
+                className="h-6 w-6"
+              />
               <h3 className="font-display text-sm font-semibold text-slate-900 break-all dark:text-slate-100">
                 {inspectorFile.name}
               </h3>
@@ -1355,13 +1560,23 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
                 <Eye className="h-3.5 w-3.5 text-slate-400" />
               </button>
             ))}
+            {mode !== 'trash' && inspectorFile.isFolder && (
+              <button
+                type="button"
+                onClick={() => setAppearanceTarget(inspectorFile)}
+                className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-left text-xs font-medium text-slate-700 hover:border-blue-400 hover:bg-blue-50/40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <span>Customize Icon &amp; Color</span>
+                <Palette className="h-3.5 w-3.5 text-blue-600" />
+              </button>
+            )}
             {mode !== 'trash' && (
               <button
                 type="button"
                 onClick={() => {
                   const parentId = inspectorFile.parents?.[0];
                   const resolved =
-                    parentId && folders.some((fl) => fl.id === parentId)
+                    parentId && mergedFolders.some((fl) => fl.id === parentId)
                       ? parentId
                       : mode === 'drive'
                         ? currentFolderId
@@ -1491,18 +1706,32 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
           </button>
 
           {contextMenu.file.isFolder && (
-            <button
-              type="button"
-              onClick={() => {
-                const f = contextMenu.file;
-                setContextMenu(null);
-                togglePin(f);
-              }}
-              className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-            >
-              <Pin className="h-3.5 w-3.5" />
-              <span>{metadataMap.get(contextMenu.file.id)?.isPinned ? 'Unpin Folder' : 'Pin Folder'}</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  const f = contextMenu.file;
+                  setContextMenu(null);
+                  setAppearanceTarget(f);
+                }}
+                className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <Palette className="h-3.5 w-3.5 text-blue-600" />
+                <span>Customize Icon &amp; Color</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const f = contextMenu.file;
+                  setContextMenu(null);
+                  togglePin(f);
+                }}
+                className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <Pin className="h-3.5 w-3.5" />
+                <span>{metadataMap.get(contextMenu.file.id)?.isPinned ? 'Unpin Folder' : 'Pin Folder'}</span>
+              </button>
+            </>
           )}
 
           <button
@@ -1557,7 +1786,7 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
               setContextMenu(null);
               const parentId = f.parents?.[0];
               const resolved =
-                parentId && folders.some((fl) => fl.id === parentId)
+                parentId && mergedFolders.some((fl) => fl.id === parentId)
                   ? parentId
                   : mode === 'drive'
                     ? currentFolderId
@@ -1702,7 +1931,7 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
       <MoveItemsDialog
         open={Boolean(moveTargets)}
         items={moveTargets || []}
-        folders={folders}
+        folders={mergedFolders}
         initialFolderId={moveInitialFolderId}
         metadataList={metadataList}
         storageProvider={storageProvider}
@@ -1710,6 +1939,24 @@ export const FileExplorerView: React.FC<FileExplorerViewProps> = ({ mode = 'driv
         onMoved={() => {
           setSelectedIds(new Set());
           triggerExplorerRefresh();
+        }}
+      />
+
+      {/* Folder Icon & Google Drive Color Customization Dialog */}
+      <FolderAppearanceDialog
+        open={Boolean(appearanceTarget)}
+        folder={appearanceTarget}
+        currentIcon={appearanceTarget ? metadataMap.get(appearanceTarget.id)?.folderIcon : null}
+        currentColor={
+          appearanceTarget
+            ? metadataMap.get(appearanceTarget.id)?.folderColor || appearanceTarget.folderColorRgb
+            : null
+        }
+        storageProvider={storageProvider}
+        onClose={() => setAppearanceTarget(null)}
+        onSave={async (patch) => {
+          if (!appearanceTarget) return;
+          await updateFolderAppearance(appearanceTarget, patch);
         }}
       />
 

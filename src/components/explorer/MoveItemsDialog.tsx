@@ -15,6 +15,7 @@ import {
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { FileMetadataRecord } from '../../contexts/DriveOSContext';
+import { FolderGlyph } from '../../lib/folderAppearance';
 import { CloudFile, StorageProvider } from '../../providers/StorageProvider';
 
 interface MoveItemsDialogProps {
@@ -74,6 +75,14 @@ export const MoveItemsDialog: React.FC<MoveItemsDialogProps> = ({
     }
     return m;
   }, [folders]);
+
+  const metaMap = useMemo(() => {
+    const m = new Map<string, FileMetadataRecord>();
+    for (const item of metadataList) {
+      m.set(item.fileId, item);
+    }
+    return m;
+  }, [metadataList]);
 
   // Compute forbidden destination IDs (cannot move a folder into itself or its descendants)
   const forbiddenIds = useMemo(() => {
@@ -413,6 +422,7 @@ export const MoveItemsDialog: React.FC<MoveItemsDialogProps> = ({
                 const isForbidden = forbiddenIds.has(folder.id);
                 const subCount = subfolderCountMap.get(folder.id) || 0;
                 const pathLabel = search.trim() ? getFolderPathLabel(folder.id) : null;
+                const fMeta = metaMap.get(folder.id);
 
                 return (
                   <div
@@ -428,10 +438,10 @@ export const MoveItemsDialog: React.FC<MoveItemsDialogProps> = ({
                     }`}
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                      <Folder
-                        className={`h-4.5 w-4.5 shrink-0 ${
-                          isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-blue-500'
-                        }`}
+                      <FolderGlyph
+                        iconName={fMeta?.folderIcon}
+                        color={fMeta?.folderColor || folder.folderColorRgb}
+                        className="h-4.5 w-4.5 shrink-0"
                       />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">

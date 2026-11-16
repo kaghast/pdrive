@@ -1,6 +1,7 @@
 import {
   Archive,
   BookOpen,
+  ChevronRight,
   Clock,
   Database,
   FileCode2,
@@ -17,7 +18,7 @@ import {
   Workflow,
   X,
 } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { ActiveNavView, useDriveOS, WorkspaceWindow } from '../../contexts/DriveOSContext';
 import { DashboardView } from '../dashboard/DashboardView';
 import { ArchiveManager } from '../editors/ArchiveManager';
@@ -53,18 +54,61 @@ export const DriveOSShell: React.FC = () => {
     wordSessions,
     activeNav,
     setActiveNav,
+    currentFolderId,
+    setCurrentFolderId,
+    allFolders,
     windows,
     activeWindowId,
     setActiveWindowId,
     closeWindow,
+    renameWindowFile,
     openNewAppWindow,
-    currentFolderId,
   } = useDriveOS();
 
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [editingTabId, setEditingTabId] = useState<string | null>(null);
+  const [editingTabValue, setEditingTabValue] = useState('');
+  const tabInputRef = useRef<HTMLInputElement>(null);
 
   const pendingSyncCount = wordSessions.filter((s) => s.status !== 'completed').length;
   const activeWindow = windows.find((w) => w.id === activeWindowId) || null;
+
+  const activeWindowBreadcrumbs = useMemo(() => {
+    if (!activeWindow) return [];
+    const folderMap = new Map(allFolders.map((f) => [f.id, f]));
+    const rawParent = activeWindow.file?.parents?.[0] || activeWindow.targetFolderId || 'root';
+    let cursor: string | undefined = folderMap.has(rawParent) ? rawParent : 'root';
+    const trail: { id: string; name: string }[] = [];
+    const seen = new Set<string>();
+    while (cursor && cursor !== 'root' && !seen.has(cursor) && trail.length < 12) {
+      seen.add(cursor);
+      const node = folderMap.get(cursor);
+      if (!node) break;
+      trail.unshift({ id: node.id, name: node.name });
+      cursor = node.parents?.[0];
+    }
+    return [{ id: 'root', name: 'My Drive' }, ...trail];
+  }, [activeWindow, allFolders]);
+
+  const startTabRename = (w: WorkspaceWindow) => {
+    setEditingTabId(w.id);
+    setEditingTabValue(w.title);
+    requestAnimationFrame(() => {
+      const input = tabInputRef.current;
+      if (!input) return;
+      input.focus();
+      const dotIdx = w.title.lastIndexOf('.');
+      if (dotIdx > 0) input.setSelectionRange(0, dotIdx);
+      else input.select();
+    });
+  };
+
+  const commitTabRename = async (w: WorkspaceWindow) => {
+    const nextName = editingTabValue.trim();
+    setEditingTabId(null);
+    if (!nextName || nextName === w.title) return;
+    await renameWindowFile(w.id, nextName);
+  };
 
   const isDark =
     settings.theme === 'dark' ||
@@ -378,42 +422,106 @@ export const DriveOSShell: React.FC = () => {
             <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
               <button
                 type="button"
-                onClick={() => setActiveWindowId(null)}
-                className={`shrink-0 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
-                  !activeWindowId
+                onClick={() => {
+                  setActiveNav('explorer');
+                  setActiveWindowId(null);
+                }}
+                title="Switch to My Drive (keeps open file tabs alive)"
+                className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
+                  !activeWindowId && activeNav === 'explorer'
                     ? 'bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-white'
-                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-slate-200'
                 }`}
               >
-                {NAV_ITEMS.find((n) => n.id === activeNav)?.label}
+                <FolderOpen className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                <span>My Drive</span>
               </button>
 
-              {windows.map((w) => (
-                <div
-                  key={w.id}
-                  className={`flex shrink-0 items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
-                    activeWindowId === w.id
-                      ? 'border-blue-500 bg-blue-50/70 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300'
-                      : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300'
+              {activeNav !== 'explorer' && (
+                <button
+                  type="button"
+                  onClick={() => setActiveWindowId(null)}
+                  className={`shrink-0 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
+                    !activeWindowId
+                      ? 'bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-white'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                   }`}
                 >
-                  <button
-                    type="button"
-                    onClick={() => setActiveWindowId(w.id)}
-                    className="max-w-[140px] truncate whitespace-nowrap"
+                  {NAV_ITEMS.find((n) => n.id === activeNav)?.label}
+                </button>
+              )}
+
+              {windows.map((w) => {
+                const isTabActive = activeWindowId === w.id;
+                const isEditingTab = editingTabId === w.id;
+                const TabIcon =
+                  w.appId === 'pdf' || w.appId === 'google-docs-export'
+                    ? FileText
+                    : w.appId === 'ebook'
+                      ? BookOpen
+                      : w.appId === 'sqlite'
+                        ? Database
+                        : w.appId === 'archive'
+                          ? Archive
+                          : w.appId === 'excalidraw' || w.appId === 'drawio' || w.appId === 'mermaid'
+                            ? Workflow
+                            : FileCode2;
+
+                return (
+                  <div
+                    key={w.id}
+                    className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
+                      isTabActive
+                        ? 'border-blue-500 bg-blue-50/80 text-blue-700 shadow-2xs dark:bg-blue-950/50 dark:text-blue-300'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300'
+                    }`}
                   >
-                    {w.title}
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Close ${w.title}`}
-                    onClick={() => closeWindow(w.id)}
-                    className="rounded p-0.5 hover:bg-slate-200/70 dark:hover:bg-slate-700"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
+                    <TabIcon className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                    {isEditingTab ? (
+                      <input
+                        ref={tabInputRef}
+                        value={editingTabValue}
+                        onChange={(e) => setEditingTabValue(e.target.value)}
+                        onBlur={() => commitTabRename(w)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            commitTabRename(w);
+                          } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            setEditingTabId(null);
+                          }
+                        }}
+                        className="w-36 rounded border border-blue-400 bg-white px-1.5 py-0.5 text-xs text-slate-900 focus:outline-none dark:bg-slate-900 dark:text-white"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setActiveWindowId(w.id)}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          startTabRename(w);
+                        }}
+                        title={`${w.title} (Double-click to rename)`}
+                        className="max-w-[160px] truncate whitespace-nowrap"
+                      >
+                        {w.title}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      aria-label={`Close ${w.title}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeWindow(w.id);
+                      }}
+                      className="rounded p-0.5 hover:bg-slate-200/70 dark:hover:bg-slate-700"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -432,24 +540,68 @@ export const DriveOSShell: React.FC = () => {
 
         {/* Workspace Viewport */}
         <main className="mx-auto w-full max-w-[1440px] flex-1 p-4 lg:p-6">
-          {activeWindow ? (
-            renderWorkspaceWindow(activeWindow)
-          ) : activeNav === 'dashboard' ? (
-            <DashboardView />
-          ) : activeNav === 'explorer' ? (
-            <FileExplorerView mode="drive" />
-          ) : activeNav === 'favorites' ? (
-            <FileExplorerView mode="favorites" />
-          ) : activeNav === 'recent' ? (
-            <FileExplorerView mode="recent" />
-          ) : activeNav === 'trash' ? (
-            <FileExplorerView mode="trash" />
-          ) : activeNav === 'word-sync' ? (
-            <WordSyncView />
-          ) : activeNav === 'apps' ? (
-            renderAppsLauncher()
-          ) : (
-            <SettingsView />
+          {/* Open File Directory Breadcrumb Bar (visible when a file tab is active) */}
+          {activeWindow && (
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs dark:border-slate-800 dark:bg-[#14171F]">
+              <div className="flex min-w-0 flex-wrap items-center gap-1">
+                {activeWindowBreadcrumbs.map((crumb, idx) => (
+                  <React.Fragment key={crumb.id}>
+                    {idx > 0 && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCurrentFolderId(crumb.id);
+                        setActiveNav('explorer');
+                        setActiveWindowId(null);
+                      }}
+                      className="inline-flex items-center gap-1 rounded-lg px-2 py-0.5 font-medium text-slate-600 hover:bg-slate-100 hover:text-blue-600 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-blue-400"
+                    >
+                      {idx === 0 && <FolderOpen className="h-3 w-3 text-blue-600 dark:text-blue-400" />}
+                      <span className="truncate">{crumb.name}</span>
+                    </button>
+                  </React.Fragment>
+                ))}
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                <button
+                  type="button"
+                  onDoubleClick={() => startTabRename(activeWindow)}
+                  title="Double-click tab or title to rename"
+                  className="truncate rounded-lg bg-slate-100 px-2 py-0.5 font-semibold text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+                >
+                  {activeWindow.title}
+                </button>
+              </div>
+              <span className="hidden text-[11px] text-slate-400 sm:inline">
+                Double-click tab name to rename · Click any folder to jump to Drive
+              </span>
+            </div>
+          )}
+
+          {/* Keep open file windows mounted in background so state stays alive when switching to My Drive */}
+          {windows.map((win) => (
+            <div key={win.id} className={activeWindowId === win.id ? 'block' : 'hidden'}>
+              {renderWorkspaceWindow(win)}
+            </div>
+          ))}
+
+          {!activeWindow && (
+            activeNav === 'dashboard' ? (
+              <DashboardView />
+            ) : activeNav === 'explorer' ? (
+              <FileExplorerView mode="drive" />
+            ) : activeNav === 'favorites' ? (
+              <FileExplorerView mode="favorites" />
+            ) : activeNav === 'recent' ? (
+              <FileExplorerView mode="recent" />
+            ) : activeNav === 'trash' ? (
+              <FileExplorerView mode="trash" />
+            ) : activeNav === 'word-sync' ? (
+              <WordSyncView />
+            ) : activeNav === 'apps' ? (
+              renderAppsLauncher()
+            ) : (
+              <SettingsView />
+            )
           )}
         </main>
       </div>

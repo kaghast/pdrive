@@ -11,6 +11,7 @@ export interface CloudFile {
   iconLink?: string;
   webViewLink?: string;
   trashed?: boolean;
+  folderColorRgb?: string;
   provider: 'google-drive';
   isFolder: boolean;
   isGoogleWorkspaceDoc: boolean;
@@ -51,6 +52,9 @@ export interface StorageProvider {
   uploadFile(file: File | Blob, name: string, mimeType: string, parentId?: string): Promise<CloudFile>;
   updateFileContent(fileId: string, content: Blob | string, mimeType: string): Promise<CloudFile>;
   renameFile(fileId: string, newName: string): Promise<CloudFile>;
+  updateFolderColor(fileId: string, folderColorRgb: string): Promise<CloudFile>;
+  getFolderColorPalette(): Promise<string[]>;
+  getRootFolderId(): Promise<string | null>;
   moveFile(fileId: string, currentParents: string[], targetFolderId: string): Promise<CloudFile>;
   copyFile(fileId: string, newName: string, targetFolderId?: string): Promise<CloudFile>;
   trashFile(fileId: string): Promise<CloudFile>;

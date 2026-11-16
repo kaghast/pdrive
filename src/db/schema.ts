@@ -127,6 +127,8 @@ export const fileMetadata = pgTable(
     isFavorite: boolean('is_favorite').default(false).notNull(),
     isPinned: boolean('is_pinned').default(false).notNull(),
     tags: jsonb('tags').$type<string[]>().default([]).notNull(),
+    folderIcon: text('folder_icon'),
+    folderColor: text('folder_color'),
     lastOpenedAt: timestamp('last_opened_at'),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },

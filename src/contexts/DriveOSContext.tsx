@@ -38,6 +38,8 @@ export interface FileMetadataRecord {
   isFavorite: boolean;
   isPinned: boolean;
   tags: string[];
+  folderIcon?: string | null;
+  folderColor?: string | null;
   lastOpenedAt: string | null;
   updatedAt: string;
 }
@@ -111,6 +113,10 @@ interface DriveOSContextValue {
   toggleFavorite: (file: CloudFile) => Promise<void>;
   togglePin: (file: CloudFile) => Promise<void>;
   updateTags: (file: CloudFile, tags: string[]) => Promise<void>;
+  updateFolderAppearance: (
+    folder: CloudFile,
+    patch: { folderIcon?: string | null; folderColor?: string | null }
+  ) => Promise<void>;
   recordRecent: (file: CloudFile) => Promise<void>;
   microsoftStatus: MicrosoftConnectionStatus;
   refreshProfile: () => Promise<void>;
@@ -127,8 +133,13 @@ interface DriveOSContextValue {
   setActiveNav: (nav: ActiveNavView) => void;
   currentFolderId: string;
   setCurrentFolderId: (id: string) => void;
+  allFolders: CloudFile[];
+  refreshAllFolders: () => Promise<void>;
+  focusedExplorerFile: CloudFile | null;
+  setFocusedExplorerFile: (file: CloudFile | null) => void;
   openFileWithApp: (file: CloudFile, appOverride?: IntegratedAppId) => void;
   openNewAppWindow: (win: Omit<WorkspaceWindow, 'id'>) => void;
+  renameWindowFile: (windowId: string, newName: string) => Promise<void>;
   windows: WorkspaceWindow[];
   activeWindowId: string | null;
   setActiveWindowId: (id: string | null) => void;
@@ -194,6 +205,8 @@ export const DriveOSProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const [activeNav, setActiveNav] = useState<ActiveNavView>('dashboard');
   const [currentFolderId, setCurrentFolderId] = useState<string>('root');
+  const [allFolders, setAllFolders] = useState<CloudFile[]>([]);
+  const [focusedExplorerFile, setFocusedExplorerFile] = useState<CloudFile | null>(null);
   const [windows, setWindows] = useState<WorkspaceWindow[]>([]);
   const [activeWindowId, setActiveWindowId] = useState<string | null>(null);
   const [explorerRefreshTick, setExplorerRefreshTick] = useState(0);
@@ -273,6 +286,16 @@ export const DriveOSProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [storageProvider]);
 
+  const refreshAllFolders = useCallback(async () => {
+    if (!getGoogleAccessToken()) return;
+    try {
+      const list = await storageProvider.listAllFolders();
+      setAllFolders(list);
+    } catch {
+      // ignore folder cache refresh error
+    }
+  }, [storageProvider]);
+
   useEffect(() => {
     const unsub = initAuth(
       (user, gToken) => {
@@ -282,7 +305,10 @@ export const DriveOSProvider: React.FC<{ children: React.ReactNode }> = ({ child
         refreshProfile();
         refreshMetadata();
         refreshWordSessions();
-        if (gToken) refreshQuota();
+        if (gToken) {
+          refreshQuota();
+          refreshAllFolders();
+        }
       },
       () => {
         setFirebaseUser(null);
@@ -295,7 +321,13 @@ export const DriveOSProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     );
     return () => unsub();
-  }, [refreshMetadata, refreshProfile, refreshQuota, refreshWordSessions]);
+  }, [refreshAllFolders, refreshMetadata, refreshProfile, refreshQuota, refreshWordSessions]);
+
+  useEffect(() => {
+    if (hasGoogleToken && explorerRefreshTick > 0) {
+      refreshAllFolders();
+    }
+  }, [explorerRefreshTick, hasGoogleToken, refreshAllFolders]);
 
   // Listen for Microsoft OAuth popup completion
   useEffect(() => {
@@ -431,6 +463,37 @@ export const DriveOSProvider: React.FC<{ children: React.ReactNode }> = ({ child
     [refreshMetadata]
   );
 
+  const updateFolderAppearance = useCallback(
+    async (
+      folder: CloudFile,
+      patch: { folderIcon?: string | null; folderColor?: string | null }
+    ) => {
+      try {
+        if (patch.folderColor) {
+          await storageProvider.updateFolderColor(folder.id, patch.folderColor);
+        }
+        await apiFetch('/api/metadata/folder-style', {
+          method: 'POST',
+          body: JSON.stringify({
+            fileId: folder.id,
+            fileName: folder.name,
+            mimeType: folder.mimeType,
+            parentId: folder.parents?.[0] || null,
+            sizeBytes: folder.size || null,
+            folderIcon: patch.folderIcon,
+            folderColor: patch.folderColor,
+          }),
+        });
+        await refreshMetadata();
+        triggerExplorerRefresh();
+        toast.success('Folder icon & color updated (synced to Google Drive)');
+      } catch (err: any) {
+        toast.error(err.message || 'Failed to update folder appearance');
+      }
+    },
+    [refreshMetadata, storageProvider, triggerExplorerRefresh]
+  );
+
   const recordRecent = useCallback(
     async (file: CloudFile) => {
       try {
@@ -563,26 +626,60 @@ export const DriveOSProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const closeWindow = useCallback(
     (id: string) => {
-      setWindows((prev) => {
-        const next = prev.filter((w) => w.id !== id);
-        if (activeWindowId === id) {
-          setActiveWindowId(next[next.length - 1]?.id || null);
-        }
-        return next;
-      });
+      setWindows((prev) => prev.filter((w) => w.id !== id));
+      if (activeWindowId === id) {
+        setActiveWindowId(null);
+        setActiveNav('explorer');
+      }
     },
     [activeWindowId]
+  );
+
+  const renameWindowFile = useCallback(
+    async (windowId: string, newName: string) => {
+      const trimmed = newName.trim();
+      if (!trimmed) return;
+      const win = windows.find((w) => w.id === windowId);
+      if (!win || win.title === trimmed) return;
+
+      try {
+        if (win.file) {
+          const updated = await storageProvider.renameFile(win.file.id, trimmed);
+          setWindows((prev) =>
+            prev.map((w) =>
+              w.id === windowId ? { ...w, title: updated.name, file: updated } : w
+            )
+          );
+          if (focusedExplorerFile?.id === win.file.id) {
+            setFocusedExplorerFile(updated);
+          }
+          triggerExplorerRefresh();
+          await refreshMetadata();
+          toast.success(`Renamed to "${updated.name}"`);
+        } else {
+          setWindows((prev) =>
+            prev.map((w) => (w.id === windowId ? { ...w, title: trimmed } : w))
+          );
+          toast.success(`Tab renamed to "${trimmed}"`);
+        }
+      } catch (err: any) {
+        toast.error(err.message || 'Failed to rename file');
+      }
+    },
+    [focusedExplorerFile, refreshMetadata, storageProvider, triggerExplorerRefresh, windows]
   );
 
   const openFileWithApp = useCallback(
     (file: CloudFile, appOverride?: IntegratedAppId) => {
       if (file.isFolder) {
+        setFocusedExplorerFile(null);
         setCurrentFolderId(file.id);
         setActiveNav('explorer');
         setActiveWindowId(null);
         return;
       }
 
+      setFocusedExplorerFile(file);
       recordRecent(file);
       let targetApp = appOverride || resolveOpenWithApp(file, settings.defaultOpenWith);
 
@@ -647,6 +744,7 @@ export const DriveOSProvider: React.FC<{ children: React.ReactNode }> = ({ child
         toggleFavorite,
         togglePin,
         updateTags,
+        updateFolderAppearance,
         recordRecent,
         microsoftStatus,
         refreshProfile,
@@ -660,8 +758,13 @@ export const DriveOSProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setActiveNav,
         currentFolderId,
         setCurrentFolderId,
+        allFolders,
+        refreshAllFolders,
+        focusedExplorerFile,
+        setFocusedExplorerFile,
         openFileWithApp,
         openNewAppWindow,
+        renameWindowFile,
         windows,
         activeWindowId,
         setActiveWindowId,

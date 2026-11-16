@@ -137,6 +137,8 @@ export async function upsertFileMetadata(
     isFavorite?: boolean;
     isPinned?: boolean;
     tags?: string[];
+    folderIcon?: string | null;
+    folderColor?: string | null;
     lastOpenedAt?: Date;
   }
 ) {
@@ -167,6 +169,8 @@ export async function upsertFileMetadata(
           isFavorite: input.isFavorite ?? false,
           isPinned: input.isPinned ?? false,
           tags: input.tags ?? [],
+          folderIcon: input.folderIcon ?? null,
+          folderColor: input.folderColor ?? null,
           lastOpenedAt: input.lastOpenedAt ?? null,
           updatedAt: new Date(),
         })
@@ -184,6 +188,8 @@ export async function upsertFileMetadata(
         isFavorite: input.isFavorite !== undefined ? input.isFavorite : existing.isFavorite,
         isPinned: input.isPinned !== undefined ? input.isPinned : existing.isPinned,
         tags: input.tags !== undefined ? input.tags : existing.tags,
+        folderIcon: input.folderIcon !== undefined ? input.folderIcon : existing.folderIcon,
+        folderColor: input.folderColor !== undefined ? input.folderColor : existing.folderColor,
         lastOpenedAt: input.lastOpenedAt !== undefined ? input.lastOpenedAt : existing.lastOpenedAt,
         updatedAt: new Date(),
       })
